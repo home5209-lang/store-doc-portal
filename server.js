@@ -13,10 +13,11 @@ const {
   listStores,
   addDocument,
   getDocumentsForStore,
+  removeDocumentsOfType,
   markSubmitted
 } = require('./db');
 const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
-const { fetchContractFromModusign } = require('./contractStub');
+const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const { requireAdminAuth } = require('./auth');
 
@@ -116,19 +117,10 @@ app.post(
       source: 'upload'
     });
 
-    // 3. 계약서 자동 첨부 (모두싸인 API 연동)
-    // 매장명으로 모두싸인에서 서명 완료 문서를 찾아 실제 PDF를 받아온다.
-    // 매칭에 실패하면 .txt 안내 파일이 대신 생성된다 (운영자 수동 확인용).
-    const contractBasePath = path.join(GENERATED_ROOT, storeId, '캐치테이블_이용계약서.pdf');
-    const contractResult = await fetchContractFromModusign(store, contractBasePath);
-    const contractFinalPath = contractResult.matched ? contractResult.path : contractBasePath.replace(/\.pdf$/i, '.txt');
-    addDocument({
-      store_id: storeId,
-      doc_type: DOC_TYPES.CONTRACT,
-      original_name: path.basename(contractFinalPath),
-      file_path: contractFinalPath,
-      source: contractResult.matched ? 'auto:modusign' : 'auto:modusign-failed'
-    });
+    // 3. 계약서는 자동 첨부하지 않는다.
+    // 한 매장에 계약서가 여러 종류(광고/이용계약서/합의서 등)라 자동 선택이 불안정하므로,
+    // 운영자가 /admin 에서 모두싸인 후보 목록을 보고 직접 선택해 첨부한다.
+    // (아래 GET /admin/contract-candidates, POST /admin/attach-contract 참고)
 
     // 4. 사용승낙서 / 재직증명서 자동 생성
     const consentPath = path.join(GENERATED_ROOT, storeId, '사용승낙서.docx');
@@ -193,6 +185,46 @@ app.post('/admin/create-link', (req, res) => {
   const token = generateUploadToken(storeId);
   const url = `${req.protocol}://${req.get('host')}/upload/${storeId}/${token}`;
   res.redirect(`/admin?created=${encodeURIComponent(url)}`);
+});
+
+// 매장별 모두싸인 계약서 "후보" 목록 — 운영자가 직접 선택
+app.get('/admin/contract-candidates/:storeId', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  // 기본 검색어는 매장명. 오타/표기 차이가 있으면 운영자가 q로 바꿔 다시 검색할 수 있다.
+  const query = (req.query.q && req.query.q.trim()) || store.name;
+  const current = getDocumentsForStore(store.id).find((d) => d.doc_type === DOC_TYPES.CONTRACT) || null;
+  try {
+    const candidates = await findContractCandidates(query);
+    res.render('contract-candidates', { store, query, candidates, current, error: null });
+  } catch (err) {
+    res.render('contract-candidates', { store, query, candidates: [], current, error: err.message });
+  }
+});
+
+// 선택한 계약서를 내려받아 매장 계약서로 첨부 (기존 계약서는 교체)
+app.post('/admin/attach-contract/:storeId', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  const { documentId, title } = req.body;
+  if (!documentId) return res.status(400).send('documentId가 필요합니다.');
+  try {
+    const outPath = path.join(GENERATED_ROOT, store.id, '캐치테이블_이용계약서.pdf');
+    await downloadSignedPdf(documentId, outPath);
+    // 기존 계약서가 있으면 교체 (단건 유지)
+    removeDocumentsOfType(store.id, DOC_TYPES.CONTRACT);
+    const safeTitle = (title || '캐치테이블_이용계약서').replace(/[^\w.\-가-힣 ]/g, '_').trim();
+    addDocument({
+      store_id: store.id,
+      doc_type: DOC_TYPES.CONTRACT,
+      original_name: `${safeTitle || '캐치테이블_이용계약서'}.pdf`,
+      file_path: outPath,
+      source: 'manual:modusign'
+    });
+    res.redirect('/admin');
+  } catch (err) {
+    res.status(500).send('계약서 첨부 실패: ' + err.message);
+  }
 });
 
 app.get('/admin/download/:storeId/:docId', (req, res) => {
