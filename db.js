@@ -68,6 +68,11 @@ function getDocumentsForStore(storeId) {
   return db.prepare('SELECT * FROM documents WHERE store_id = ? ORDER BY created_at').all(storeId);
 }
 
+// 특정 종류의 문서를 모두 삭제한다. (예: 계약서를 다시 선택할 때 기존 계약서 교체용)
+function removeDocumentsOfType(storeId, docType) {
+  db.prepare('DELETE FROM documents WHERE store_id = ? AND doc_type = ?').run(storeId, docType);
+}
+
 function markSubmitted(storeId) {
   db.prepare(`UPDATE stores SET status='submitted', submitted_at=datetime('now') WHERE id=?`).run(storeId);
 }
@@ -80,5 +85,6 @@ module.exports = {
   listStores,
   addDocument,
   getDocumentsForStore,
+  removeDocumentsOfType,
   markSubmitted
 };

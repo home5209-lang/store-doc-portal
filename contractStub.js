@@ -52,6 +52,7 @@ const DEFAULT_OPTIONS = {
   levenshteinWeight: 0.4,
   autoMatchThreshold: 0.85,
   reviewThreshold: 0.6,
+  candidateThreshold: 0.5,
   containmentMinLen: 3,
   maxPages: 5,
   pageSize: 100,
@@ -366,6 +367,62 @@ async function findBestContractMatch(storeName, options = {}) {
   return { storeName, status, bestMatch: best, ranked: ranked.slice(0, 5) };
 }
 
+/**
+ * 모두싸인 서버에서 "제목에 검색어가 포함된" 서명 완료 문서를 직접 조회한다.
+ * (계정 문서가 많을 때 로컬 스캔은 앞쪽 일부만 훑어 누락되므로, 모두싸인의
+ *  contains(title, ...) 필터로 서버가 전체에서 찾게 한다 — UI 제목 검색과 동일.)
+ */
+async function searchCompletedDocumentsByTitle(titleQuery, options = {}) {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const q = String(titleQuery || '').replace(/'/g, '').trim();
+  if (!q) return [];
+
+  const filter = encodeURIComponent(`status eq 'COMPLETED' and contains(title, '${q}')`);
+  const all = [];
+  for (let page = 0; page < opts.maxPages; page += 1) {
+    const offset = page * opts.pageSize;
+    const data = await modusignGet(
+      `/documents?offset=${offset}&limit=${opts.pageSize}&filter=${filter}`
+    );
+    const documents = extractDocumentArray(data);
+    if (documents.length === 0) break;
+    all.push(...documents);
+    if (documents.length < opts.pageSize) break;
+  }
+  return all;
+}
+
+/**
+ * 매장명(검색어)에 매칭되는 서명 완료 계약서 "후보"를 모두 돌려준다.
+ * 모두싸인 제목 검색으로 후보를 서버에서 가져온 뒤, 표시/정렬용 유사도 점수를 붙인다.
+ * (자동 선택 대신 운영자가 관리자 화면에서 직접 고를 수 있도록 목록을 제공)
+ * @returns {Array<{ documentId, title, signers, createdAt, matchedField, matchedValue, score }>}
+ */
+async function findContractCandidates(storeName, options = {}) {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+
+  const documents = await searchCompletedDocumentsByTitle(storeName, opts);
+
+  return documents
+    .map((doc) => {
+      const best = scoreDocumentAgainstStore(storeName, doc, opts);
+      return {
+        documentId: getDocId(doc),
+        title: getDocTitle(doc),
+        signers: getParticipantNames(doc),
+        createdAt: doc.createdAt || doc.created_at || null,
+        matchedField: best.field || 'title',
+        matchedValue: best.value,
+        score: best.score,
+      };
+    })
+    .filter((r) => r.documentId)
+    .sort(
+      (a, b) =>
+        b.score - a.score || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+    );
+}
+
 /** 서명 완료 문서의 PDF를 내려받아 outPath에 저장한다. */
 async function downloadSignedPdf(documentId, outPath) {
   const detail = await modusignGet(`/documents/${documentId}`);
@@ -481,6 +538,8 @@ module.exports = {
   fetchContractFromModusign,
   // 모두싸인 연동
   findBestContractMatch,
+  findContractCandidates,
+  searchCompletedDocumentsByTitle,
   findCompletedDocumentByStoreName,
   downloadSignedPdf,
   listCompletedDocuments,

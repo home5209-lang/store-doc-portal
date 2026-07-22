@@ -39,6 +39,7 @@ const {
   getModusignCredentials,
   listCompletedDocuments,
   findBestContractMatch,
+  normalizeStoreName,
 } = require('../contractStub');
 
 async function main() {
@@ -53,34 +54,46 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('\n=== 2) 완료 문서 목록 조회 (첫 페이지 소량) ===');
-  const docs = await listCompletedDocuments({ maxPages: 1, pageSize: 5 });
-  console.log(`불러온 완료 문서 수(최대 5): ${docs.length}`);
-  if (docs.length > 0) {
-    console.log('첫 문서의 최상위 키:', Object.keys(docs[0]));
-    docs.forEach((d, i) => {
-      const participants = d.participants || d.signers || d.parties || [];
-      const names = participants.map((p) => p && (p.name || p.signerName)).filter(Boolean);
-      console.log(
-        `  [${i}] id=${d.id || d.documentId} title="${d.title || d.name || ''}" 서명자=${JSON.stringify(names)}`
-      );
-    });
-  } else {
+  console.log('\n=== 2) 완료 문서 목록 조회 ===');
+  const docs = await listCompletedDocuments({ maxPages: 3, pageSize: 100 });
+  console.log(`불러온 완료 문서 수: ${docs.length}`);
+  if (docs.length === 0) {
     console.log('완료된 문서가 없습니다. (계약이 아직 서명 완료 상태가 아닐 수 있음)');
+    return;
   }
+  console.log('첫 문서의 최상위 키:', Object.keys(docs[0]));
+
+  const compact = (s) => normalizeStoreName(s).replace(/\s+/g, '');
+  const namesOf = (d) =>
+    (d.participants || d.signers || d.parties || [])
+      .map((p) => p && (p.name || p.signerName))
+      .filter(Boolean);
 
   if (!storeName) {
-    console.log('\n매장명을 인자로 넘기면 매칭까지 확인합니다. 예) node scripts/test-modusign.js "라라와케이"');
+    console.log('\n(처음 20건 제목)');
+    docs.slice(0, 20).forEach((d, i) => console.log(`  [${i}] "${d.title || d.name || ''}"`));
+    console.log('\n매장명을 인자로 넘기면 관련 계약서/매칭을 확인합니다. 예) node scripts/test-modusign.js "푸시풋살룬"');
     return;
   }
 
-  console.log(`\n=== 3) "${storeName}" 매칭 결과 ===`);
+  const target = compact(storeName);
+  console.log(`\n=== "${storeName}" 관련 완료 문서 (제목/서명자에 이름 포함 — 계약 종류 확인용) ===`);
+  const related = docs.filter((d) => {
+    const title = d.title || d.name || '';
+    const parts = namesOf(d).join(' ');
+    return compact(title).includes(target) || compact(parts).includes(target);
+  });
+  if (related.length === 0) console.log('  (관련 문서 없음)');
+  related.forEach((d) => {
+    console.log(`  - title="${d.title || d.name || ''}" 서명자=${JSON.stringify(namesOf(d))} id=${d.id || d.documentId}`);
+  });
+
+  console.log(`\n=== 3) "${storeName}" 현재 매칭 결과 ===`);
   const result = await findBestContractMatch(storeName);
   console.log('판정:', result.status);
-  console.log('상위 후보:');
   result.ranked.forEach((r, i) => {
     console.log(
-      `  ${i + 1}. score=${r.score.toFixed(3)} [${r.matchedField}] "${r.matchedValue}" (docId=${r.documentId})`
+      `  ${i + 1}. score=${r.score.toFixed(3)} [${r.matchedField}] title="${r.title}" (docId=${r.documentId})`
     );
   });
 }

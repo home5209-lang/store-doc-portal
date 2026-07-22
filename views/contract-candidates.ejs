@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>계약서 후보 선택 - <%= store.name %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f5f5f4; margin: 0; padding: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { color: #77746e; font-size: 13px; margin: 0 0 16px; }
+    a.back { color: #1a56db; font-size: 13px; text-decoration: none; }
+    .current { background: #e3f2e9; color: #1c6b45; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin: 12px 0; }
+    .error { background: #fdecea; color: #b3261e; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin: 12px 0; white-space: pre-wrap; }
+    .empty { padding: 40px; text-align: center; color: #8a8a86; background: #fff; border-radius: 12px; }
+    .card { background: #fff; border: 1px solid #eeece7; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .card .title { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+    .card .meta { font-size: 12px; color: #77746e; }
+    .score { display: inline-block; background: #f2ede1; color: #8a6a1f; border-radius: 6px; padding: 2px 8px; font-size: 11px; margin-left: 6px; }
+    .attach-btn { padding: 8px 14px; border: none; border-radius: 6px; background: #1c1c1a; color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .search-form { display: flex; gap: 8px; margin: 12px 0 16px; }
+    .search-form input { flex: 1; padding: 8px 10px; border: 1px solid #d8d6d0; border-radius: 6px; font-size: 13px; }
+    .search-form button { padding: 8px 14px; border: none; border-radius: 6px; background: #1c1c1a; color: #fff; font-size: 13px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <a class="back" href="/admin">← 관리자 화면으로</a>
+  <h1><%= store.name %> — 계약서 후보 선택</h1>
+  <p class="sub">모두싸인에서 검색어와 매칭된 서명 완료 계약서 목록입니다. 알맞은 계약서(예: 이용계약서)를 골라 첨부하세요. 다시 선택하면 교체됩니다.</p>
+
+  <form class="search-form" method="GET" action="/admin/contract-candidates/<%= store.id %>">
+    <input type="text" name="q" value="<%= query %>" placeholder="계약서 검색용 매장명 (오타/표기가 다르면 여기서 고쳐 검색)" />
+    <button type="submit">검색</button>
+  </form>
+
+  <% if (current) { %>
+    <div class="current">현재 첨부된 계약서: <%= current.original_name %></div>
+  <% } %>
+
+  <% if (error) { %>
+    <div class="error">계약서 후보를 불러오지 못했습니다:
+<%= error %></div>
+  <% } %>
+
+  <% if (!error && candidates.length === 0) { %>
+    <div class="empty">"<%= query %>" 와(과) 매칭되는 서명 완료 계약서를 찾지 못했습니다.<br />위 검색창에서 매장명 표기를 바꿔 다시 검색해보세요. (오타·띄어쓰기·업종 접미사 차이 등)</div>
+  <% } %>
+
+  <% candidates.forEach(function (c) { %>
+    <div class="card">
+      <div>
+        <p class="title"><%= c.title || '(제목 없음)' %><span class="score">유사도 <%= c.score.toFixed(3) %></span></p>
+        <div class="meta">
+          서명자: <%= (c.signers && c.signers.length) ? c.signers.join(', ') : '-' %><br />
+          <% if (c.createdAt) { %>생성: <%= c.createdAt %> · <% } %>매칭 위치: <%= c.matchedField === 'title' ? '제목' : (c.matchedField === 'participant' ? '서명자' : '-') %>
+        </div>
+      </div>
+      <form method="POST" action="/admin/attach-contract/<%= store.id %>">
+        <input type="hidden" name="documentId" value="<%= c.documentId %>" />
+        <input type="hidden" name="title" value="<%= c.title %>" />
+        <button type="submit" class="attach-btn">이 계약서 첨부</button>
+      </form>
+    </div>
+  <% }) %>
+</body>
+</html>
