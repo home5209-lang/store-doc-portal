@@ -11,6 +11,7 @@ db.exec(`
     biz_reg_no TEXT,
     contact_name TEXT,
     contact_title TEXT,
+    phone_numbers TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     submitted_at TEXT
@@ -28,6 +29,13 @@ db.exec(`
   );
 `);
 
+// 기존 DB에 phone_numbers 컬럼이 없으면 추가 (신규 DB는 위 CREATE에 이미 포함)
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN phone_numbers TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
+
 // 문서 종류는 코드 전체에서 이 5가지 키로 통일해서 다룬다
 const DOC_TYPES = {
   TELECOM_PROOF: '통신서비스 이용증명원',
@@ -40,13 +48,14 @@ const DOC_TYPES = {
 function upsertStore(store) {
   const existing = db.prepare('SELECT id FROM stores WHERE id = ?').get(store.id);
   if (existing) {
+    // phone_numbers가 넘어오지 않으면(undefined) 기존 값 보존 (COALESCE)
     db.prepare(
-      `UPDATE stores SET name=?, owner_name=?, biz_reg_no=?, contact_name=?, contact_title=? WHERE id=?`
-    ).run(store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.id);
+      `UPDATE stores SET name=?, owner_name=?, biz_reg_no=?, contact_name=?, contact_title=?, phone_numbers=COALESCE(?, phone_numbers) WHERE id=?`
+    ).run(store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null, store.id);
   } else {
     db.prepare(
-      `INSERT INTO stores (id, name, owner_name, biz_reg_no, contact_name, contact_title) VALUES (?,?,?,?,?,?)`
-    ).run(store.id, store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title);
+      `INSERT INTO stores (id, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers) VALUES (?,?,?,?,?,?,?)`
+    ).run(store.id, store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null);
   }
 }
 

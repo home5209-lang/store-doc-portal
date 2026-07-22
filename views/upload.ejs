@@ -42,6 +42,9 @@
       <label>사업자등록번호 <span class="required">*</span></label>
       <input type="text" name="biz_reg_no" value="<%= store.biz_reg_no || '' %>" placeholder="000-00-00000" required />
 
+      <label>등록할 발신번호(전화번호) <span class="required">*</span></label>
+      <input type="text" name="phone_numbers" value="<%= store.phone_numbers || '' %>" placeholder="예: 02-1234-5678 (여러 개면 쉼표로 구분)" required />
+
       <label>발신번호 담당자 이름 <span class="required">*</span></label>
       <input type="text" name="contact_name" value="<%= store.contact_name || '' %>" required />
 

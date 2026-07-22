@@ -86,7 +86,7 @@ app.post(
       return res.status(check.reason === 'expired' ? 410 : 403).render('link-invalid', { reason: check.reason });
     }
 
-    const { name, owner_name, biz_reg_no, contact_name, contact_title } = req.body;
+    const { name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers } = req.body;
 
     if (!req.files?.telecom_proof || !req.files?.biz_reg) {
       const store = getStore(storeId);
@@ -98,7 +98,7 @@ app.post(
     }
 
     // 1. 매장 정보 저장
-    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title });
+    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers });
     const store = getStore(storeId);
 
     // 2. 매장이 직접 올린 서류 2건 기록
@@ -122,23 +122,23 @@ app.post(
     // 운영자가 /admin 에서 모두싸인 후보 목록을 보고 직접 선택해 첨부한다.
     // (아래 GET /admin/contract-candidates, POST /admin/attach-contract 참고)
 
-    // 4. 사용승낙서 / 재직증명서 자동 생성
-    const consentPath = path.join(GENERATED_ROOT, storeId, '사용승낙서.docx');
+    // 4. 사용승낙서 / 재직증명서 자동 생성 (PDF — 심사 제출용)
+    const consentPath = path.join(GENERATED_ROOT, storeId, '사용승낙서.pdf');
     await generateConsentDoc(store, consentPath);
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.CONSENT,
-      original_name: '사용승낙서.docx',
+      original_name: '사용승낙서.pdf',
       file_path: consentPath,
       source: 'auto:generated'
     });
 
-    const certPath = path.join(GENERATED_ROOT, storeId, '재직증명서.docx');
+    const certPath = path.join(GENERATED_ROOT, storeId, '재직증명서.pdf');
     await generateEmploymentCert(store, certPath);
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.EMPLOYMENT_CERT,
-      original_name: '재직증명서.docx',
+      original_name: '재직증명서.pdf',
       file_path: certPath,
       source: 'auto:generated'
     });
