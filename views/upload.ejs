@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>발신번호 등록 서류 제출</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f5f5f4; margin: 0; padding: 24px 16px; }
+    .card { max-width: 480px; margin: 0 auto; background: #fff; border: 1px solid #e5e5e3; border-radius: 12px; padding: 24px; }
+    .eyebrow { font-size: 13px; color: #8a8a86; margin: 0 0 4px; }
+    h1 { font-size: 18px; margin: 0 0 20px; }
+    label { display: block; font-size: 13px; color: #55534f; margin: 14px 0 4px; }
+    input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d8d6d0; border-radius: 6px; font-size: 14px; }
+    .doc-row { border: 1px dashed #c9c7c1; border-radius: 8px; padding: 12px 14px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .doc-row .name { font-size: 14px; }
+    .doc-row .hint { font-size: 12px; color: #8a8a86; margin-top: 2px; }
+    .auto-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f7f6f3; border-radius: 8px; margin-top: 8px; }
+    .auto-row .name { font-size: 14px; color: #55534f; }
+    .badge { font-size: 12px; padding: 3px 10px; border-radius: 6px; background: #e3f2e9; color: #1c6b45; white-space: nowrap; }
+    .divider { border-top: 1px solid #e5e5e3; margin: 18px 0; }
+    button { width: 100%; margin-top: 20px; padding: 12px; font-size: 15px; border: none; border-radius: 8px; background: #1c1c1a; color: #fff; cursor: pointer; }
+    .error { background: #fdecec; color: #9b2c2c; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+    .required { color: #c0392b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <p class="eyebrow">발신번호 등록 서류 제출</p>
+    <h1><%= store.name === '매장명 미입력' ? '매장 정보를 입력해주세요' : store.name %></h1>
+
+    <% if (error) { %>
+      <div class="error"><%= error %></div>
+    <% } %>
+
+    <form method="POST" enctype="multipart/form-data">
+      <label>상호명 <span class="required">*</span></label>
+      <input type="text" name="name" value="<%= store.name === '매장명 미입력' ? '' : store.name %>" required />
+
+      <label>대표자명 <span class="required">*</span></label>
+      <input type="text" name="owner_name" value="<%= store.owner_name || '' %>" required />
+
+      <label>사업자등록번호 <span class="required">*</span></label>
+      <input type="text" name="biz_reg_no" value="<%= store.biz_reg_no || '' %>" placeholder="000-00-00000" required />
+
+      <label>발신번호 담당자 이름 <span class="required">*</span></label>
+      <input type="text" name="contact_name" value="<%= store.contact_name || '' %>" required />
+
+      <label>담당자 직위 <span class="required">*</span></label>
+      <input type="text" name="contact_title" value="<%= store.contact_title || '' %>" placeholder="예: 점장" required />
+
+      <div class="divider"></div>
+
+      <div class="doc-row">
+        <div>
+          <div class="name">통신서비스 이용증명원 <span class="required">*</span></div>
+          <div class="hint">통신사에서 발급받은 파일을 첨부해주세요</div>
+        </div>
+        <input type="file" name="telecom_proof" required />
+      </div>
+
+      <div class="doc-row">
+        <div>
+          <div class="name">사업자 등록증 <span class="required">*</span></div>
+          <div class="hint">3개월 이내 발급본</div>
+        </div>
+        <input type="file" name="biz_reg" required />
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="auto-row">
+        <span class="name">캐치테이블 이용계약서</span>
+        <span class="badge">자동 첨부</span>
+      </div>
+      <div class="auto-row">
+        <span class="name">사용 승낙서</span>
+        <span class="badge">자동 생성</span>
+      </div>
+      <div class="auto-row">
+        <span class="name">재직 증명서</span>
+        <span class="badge">자동 생성</span>
+      </div>
+
+      <button type="submit">제출하기</button>
+    </form>
+  </div>
+</body>
+</html>

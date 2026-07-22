@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>업로드 링크 오류</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f5f5f4; margin: 0; padding: 24px 16px; }
+    .card { max-width: 420px; margin: 80px auto 0; background: #fff; border: 1px solid #e5e5e3; border-radius: 12px; padding: 28px; text-align: center; }
+    h1 { font-size: 17px; margin: 0 0 8px; }
+    p { font-size: 13px; color: #8a8a86; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1><%= reason === 'expired' ? '링크가 만료되었습니다' : '유효하지 않은 링크입니다' %></h1>
+    <p>담당자에게 새 업로드 링크를 요청해주세요.</p>
+  </div>
+</body>
+</html>
