@@ -12,6 +12,7 @@ db.exec(`
     contact_name TEXT,
     contact_title TEXT,
     phone_numbers TEXT,
+    nhn_status TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     submitted_at TEXT
@@ -32,6 +33,12 @@ db.exec(`
 // 기존 DB에 phone_numbers 컬럼이 없으면 추가 (신규 DB는 위 CREATE에 이미 포함)
 try {
   db.exec('ALTER TABLE stores ADD COLUMN phone_numbers TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
+// NHN 발신번호 등록 신청 상태: null(미신청) / 'requested'(신청함) / 'registered'(등록완료)
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN nhn_status TEXT');
 } catch (e) {
   /* 이미 존재하면 무시 */
 }
@@ -86,6 +93,11 @@ function markSubmitted(storeId) {
   db.prepare(`UPDATE stores SET status='submitted', submitted_at=datetime('now') WHERE id=?`).run(storeId);
 }
 
+// NHN 등록 신청 상태 변경 ('requested' | 'registered' | null)
+function setNhnStatus(storeId, status) {
+  db.prepare(`UPDATE stores SET nhn_status=? WHERE id=?`).run(status, storeId);
+}
+
 module.exports = {
   db,
   DOC_TYPES,
@@ -95,5 +107,6 @@ module.exports = {
   addDocument,
   getDocumentsForStore,
   removeDocumentsOfType,
-  markSubmitted
+  markSubmitted,
+  setNhnStatus
 };
