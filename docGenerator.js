@@ -78,11 +78,10 @@ async function generateConsentDoc(store, outPath) {
     doc.font('kr').fontSize(11).text(today(), innerX, y, { width: innerW, align: 'right' });
     y = doc.y + 10;
 
-    // 서명줄: "발신번호 명의자 : {대표자명} {마지막글자 손글씨} (인)"
+    // 서명줄: "발신번호 명의자 : {대표자명} {마지막글자 손글씨}"
     doc.font('kr').fontSize(12).text('발신번호 명의자 : ', innerX, y, { width: innerW, continued: true });
     doc.text(`${owner}  `, { continued: true });
-    doc.font('sign').fontSize(18).text(owner.slice(-1), { continued: true });
-    doc.font('kr').fontSize(12).text('  (인)');
+    doc.font('sign').fontSize(18).text(owner.slice(-1));
     y = doc.y;
 
     // 내용 높이에 맞춰 테두리 박스 그리기
@@ -121,7 +120,7 @@ async function generateEmploymentCert(store, outPath) {
     doc.moveDown(3);
     doc.text(today(), { align: 'right' });
     doc.moveDown(1.2);
-    doc.text(`상호명: ${store.name || ''}      대표자: ${store.owner_name || ''}      (인)`, { align: 'right' });
+    doc.text(`상호명: ${store.name || ''}      대표자: ${store.owner_name || ''}`, { align: 'right' });
   });
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });

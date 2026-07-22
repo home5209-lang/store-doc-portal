@@ -14,7 +14,8 @@ const {
   addDocument,
   getDocumentsForStore,
   removeDocumentsOfType,
-  markSubmitted
+  markSubmitted,
+  setNhnStatus
 } = require('./db');
 const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
@@ -225,6 +226,23 @@ app.post('/admin/attach-contract/:storeId', async (req, res) => {
   } catch (err) {
     res.status(500).send('계약서 첨부 실패: ' + err.message);
   }
+});
+
+// 운영자 검토 후 NHN 발신번호 등록 신청. 서류 5종이 모두 모였을 때만 가능.
+// (지금은 신청 상태만 기록. 실제 NHN 콘솔 자동 제출 로봇은 이후 여기에 연결한다.)
+app.post('/admin/nhn-submit/:storeId', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+
+  const docs = getDocumentsForStore(store.id);
+  const allReady = Object.values(DOC_TYPES).every((t) => docs.some((d) => d.doc_type === t));
+  if (!allReady) return res.status(400).send('서류 5종이 모두 모여야 신청할 수 있습니다.');
+
+  // TODO(B): NHN 콘솔 자동 제출 로봇 연결 지점.
+  //   await submitToNhn(store, docs);  // 로그인 → 서류 업로드 → 제출
+  // 지금은 "신청함" 상태로만 표시하고, 실제 제출은 로봇 완성 후 이 자리에서 수행한다.
+  setNhnStatus(store.id, 'requested');
+  res.redirect('/admin');
 });
 
 app.get('/admin/download/:storeId/:docId', (req, res) => {
