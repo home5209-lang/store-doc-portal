@@ -8,7 +8,10 @@
     <div class="brand">
       <span class="dot">C</span>
       <span class="name">캐치테이블</span>
-      <span class="sub">발신번호 등록 · 관리자</span>
+      <span class="sub" style="display:flex;align-items:center;gap:10px;">
+        발신번호 등록 · 관리자
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openGuide()">❔ 사용 가이드</button>
+      </span>
     </div>
 
     <%
@@ -68,32 +71,8 @@
             <div class="sub"><%= store.owner_name || '대표자 미입력' %><% if (store.phone_numbers) { %> · <%= store.phone_numbers %><% } %></div>
             <div class="dots" style="margin-top:9px;" title="서류 <%= count %>/<%= types.length %>">
               <% types.forEach(t => { %><span class="dot <%= hasDoc(store, t) ? 'on' : 'off' %>"></span><% }) %>
-              <span style="font-size:12px;color:var(--muted);margin-left:6px;"><%= count %>/<%= types.length %></span>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px;">서류 <%= count %>/<%= types.length %></span>
             </div>
-          </div>
-
-          <div class="docs-mini">
-            <% types.forEach(t => {
-                 const doc = docOf(store, t);
-                 const isContract = (t === docTypes.CONTRACT);
-            %>
-              <div class="docrow">
-                <% if (doc) { %>
-                  <span class="dname"><%= t %></span>
-                  <span class="acts">
-                    <a class="prev" href="/admin/view/<%= store.id %>/<%= doc.id %>" target="_blank" rel="noopener">미리보기</a>
-                    <a href="/admin/download/<%= store.id %>/<%= doc.id %>">다운로드</a>
-                    <% if (isContract) { %><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">다시 선택</a><% } %>
-                  </span>
-                <% } else if (isContract) { %>
-                  <span class="missing"><%= t %></span>
-                  <span class="acts"><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">후보 선택 / 직접 첨부 →</a></span>
-                <% } else { %>
-                  <span class="missing"><%= t %></span>
-                  <span class="acts"><span class="missing">매장 업로드 대기</span></span>
-                <% } %>
-              </div>
-            <% }) %>
           </div>
 
           <div class="actions-col">
@@ -115,15 +94,78 @@
               <span class="badge gray">서류 대기중</span>
             <% } %>
             <% if (store.nhn_checked_at) { %><span class="checked-at">조회: <%= store.nhn_checked_at %></span><% } %>
-            <form method="POST" action="/admin/create-link">
-              <input type="hidden" name="storeId" value="<%= store.id %>" />
-              <button type="submit" class="btn btn-ghost btn-sm">새 링크</button>
-            </form>
+            <div style="display:flex;gap:7px;">
+              <button type="button" class="btn btn-ghost btn-sm" onclick="openDocs('<%= store.id %>')">서류 보기</button>
+              <form method="POST" action="/admin/create-link">
+                <input type="hidden" name="storeId" value="<%= store.id %>" />
+                <button type="submit" class="btn btn-ghost btn-sm">새 링크</button>
+              </form>
+            </div>
           </div>
         </div>
       <% }) %>
     </div>
     <% } %>
   </div>
+
+  <% stores.forEach(store => {
+       const count = readyCount(store);
+  %>
+    <div class="modal-overlay" id="m-<%= store.id %>">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="<%= store.name %> 제출 서류">
+        <div class="mhead">
+          <div>
+            <div class="mt"><%= store.name %></div>
+            <div class="msub">제출 서류 · <%= count %>/<%= types.length %> 준비됨</div>
+          </div>
+          <button class="mclose" type="button" onclick="closeDocs('<%= store.id %>')" aria-label="닫기">✕</button>
+        </div>
+        <div class="mbody">
+          <% types.forEach(t => {
+               const doc = docOf(store, t);
+               const isContract = (t === docTypes.CONTRACT);
+          %>
+            <div class="docrow">
+              <% if (doc) { %>
+                <span class="dname"><%= t %></span>
+                <span class="acts">
+                  <a class="prev" href="/admin/view/<%= store.id %>/<%= doc.id %>" target="_blank" rel="noopener">미리보기</a>
+                  <a href="/admin/download/<%= store.id %>/<%= doc.id %>" title="다운로드" aria-label="다운로드"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+                  <% if (isContract) { %><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">다시 선택</a><% } %>
+                </span>
+              <% } else if (isContract) { %>
+                <span class="missing"><%= t %></span>
+                <span class="acts"><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">후보 선택 / 직접 첨부 →</a></span>
+              <% } else { %>
+                <span class="missing"><%= t %></span>
+                <span class="acts"><span class="missing">매장 업로드 대기</span></span>
+              <% } %>
+            </div>
+          <% }) %>
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span class="hint" style="margin:0;">승낙서·재직증명서를 최신 양식으로 다시 만듭니다.</span>
+            <form method="POST" action="/admin/regenerate-docs/<%= store.id %>">
+              <button type="submit" class="btn btn-ghost btn-sm">서류 재생성</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% }) %>
+
+  <%- include('partials/guide') %>
+
+  <script>
+    function openDocs(id) { var o = document.getElementById('m-' + id); if (o) o.classList.add('open'); }
+    function closeDocs(id) { var o = document.getElementById('m-' + id); if (o) o.classList.remove('open'); }
+    function openGuide() { var o = document.getElementById('guide-modal'); if (o) o.classList.add('open'); }
+    function closeGuide() { var o = document.getElementById('guide-modal'); if (o) o.classList.remove('open'); }
+    document.querySelectorAll('.modal-overlay').forEach(function (o) {
+      o.addEventListener('click', function (e) { if (e.target === o) o.classList.remove('open'); });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open, .guide-drawer.open').forEach(function (o) { o.classList.remove('open'); });
+    });
+  </script>
 </body>
 </html>
