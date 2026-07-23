@@ -24,6 +24,13 @@
         <input class="input" type="text" name="name" placeholder="매장명 (캐치테이블 어드민 기준)" />
         <button class="btn btn-primary" type="submit">링크 발급</button>
       </form>
+
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
+        <form method="POST" action="/admin/nhn-sync" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='조회 중…';">
+          <button class="btn btn-ghost btn-sm" type="submit">↻ NHN 심사 상태 새로고침</button>
+        </form>
+        <span class="hint" style="margin:0;">심사 상태는 주기적으로 자동 갱신됩니다.</span>
+      </div>
     </div>
 
     <% if (stores.length === 0) { %>
@@ -73,14 +80,25 @@
               <td>
                 <% if (store.nhn_status === 'registered') { %>
                   <span class="badge green">등록완료</span>
+                <% } else if (store.nhn_status === 'rejected') { %>
+                  <span class="badge red">반려</span>
+                  <% if (store.nhn_reject_reason) { %>
+                    <span class="reject-reason">사유: <%= store.nhn_reject_reason %></span>
+                  <% } %>
+                  <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');" style="margin-top:6px;">
+                    <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
+                  </form>
                 <% } else if (store.nhn_status === 'requested') { %>
-                  <span class="badge warn">신청함</span>
+                  <span class="badge warn">심사중</span>
                 <% } else if (allReady) { %>
                   <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 검토하셨나요? NHN에 발신번호 등록을 신청합니다.');">
                     <button type="submit" class="btn btn-primary btn-sm">NHN 등록 신청</button>
                   </form>
                 <% } else { %>
                   <span class="badge gray">서류 대기중</span>
+                <% } %>
+                <% if (store.nhn_checked_at) { %>
+                  <span class="checked-at">조회: <%= store.nhn_checked_at %></span>
                 <% } %>
               </td>
               <td>

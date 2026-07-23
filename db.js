@@ -36,9 +36,22 @@ try {
 } catch (e) {
   /* 이미 존재하면 무시 */
 }
-// NHN 발신번호 등록 신청 상태: null(미신청) / 'requested'(신청함) / 'registered'(등록완료)
+// NHN 발신번호 등록 신청 상태:
+//   null(미신청) / 'requested'(신청함·심사중) / 'registered'(등록완료) / 'rejected'(반려)
 try {
   db.exec('ALTER TABLE stores ADD COLUMN nhn_status TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
+// 반려 사유(반려일 때 NHN 콘솔에서 긁어온 텍스트)
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN nhn_reject_reason TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
+// 마지막으로 NHN 상태를 조회한 시각
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN nhn_checked_at TEXT');
 } catch (e) {
   /* 이미 존재하면 무시 */
 }
@@ -93,9 +106,31 @@ function markSubmitted(storeId) {
   db.prepare(`UPDATE stores SET status='submitted', submitted_at=datetime('now') WHERE id=?`).run(storeId);
 }
 
-// NHN 등록 신청 상태 변경 ('requested' | 'registered' | null)
+// NHN 등록 신청 상태 변경 ('requested' | 'registered' | 'rejected' | null)
 function setNhnStatus(storeId, status) {
   db.prepare(`UPDATE stores SET nhn_status=? WHERE id=?`).run(status, storeId);
+}
+
+// NHN 심사 결과(주기 조회로 갱신): 상태 + 반려사유 + 조회시각을 함께 반영
+function setNhnResult(storeId, status, reason) {
+  db.prepare(
+    `UPDATE stores SET nhn_status=?, nhn_reject_reason=?, nhn_checked_at=datetime('now') WHERE id=?`
+  ).run(status, reason || null, storeId);
+}
+
+// 발신번호(숫자만)로 매장을 찾는다. phone_numbers에 여러 개가 쉼표 등으로 들어있을 수 있어
+// 각 매장의 번호들을 정규화해 정확 일치를 찾는다. (주기 동기화에서 스크래핑 결과 매칭용)
+function findStoreByPhone(digits) {
+  const target = String(digits || '').replace(/[^0-9]/g, '');
+  if (!target) return null;
+  const rows = db.prepare('SELECT * FROM stores WHERE phone_numbers IS NOT NULL').all();
+  return (
+    rows.find((s) =>
+      String(s.phone_numbers)
+        .split(/[,/\n;]/)
+        .some((p) => p.replace(/[^0-9]/g, '') === target)
+    ) || null
+  );
 }
 
 module.exports = {
@@ -108,5 +143,7 @@ module.exports = {
   getDocumentsForStore,
   removeDocumentsOfType,
   markSubmitted,
-  setNhnStatus
+  setNhnStatus,
+  setNhnResult,
+  findStoreByPhone
 };
