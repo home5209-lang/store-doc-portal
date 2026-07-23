@@ -46,11 +46,14 @@
               <% if (c.createdAt) { %>생성: <%= c.createdAt %> · <% } %>매칭: <%= c.matchedField === 'title' ? '제목' : (c.matchedField === 'participant' ? '서명자' : '-') %>
             </div>
           </div>
-          <form method="POST" action="/admin/attach-contract/<%= store.id %>">
-            <input type="hidden" name="documentId" value="<%= c.documentId %>" />
-            <input type="hidden" name="title" value="<%= c.title %>" />
-            <button type="submit" class="btn btn-primary btn-sm">이 계약서 첨부</button>
-          </form>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <a class="btn btn-ghost btn-sm" href="/admin/candidate-preview/<%= store.id %>/<%= c.documentId %>" target="_blank" rel="noopener">미리보기</a>
+            <form method="POST" action="/admin/attach-contract/<%= store.id %>">
+              <input type="hidden" name="documentId" value="<%= c.documentId %>" />
+              <input type="hidden" name="title" value="<%= c.title %>" />
+              <button type="submit" class="btn btn-primary btn-sm">이 계약서 첨부</button>
+            </form>
+          </div>
         </div>
       <% }) %>
     </div>

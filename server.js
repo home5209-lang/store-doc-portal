@@ -366,6 +366,41 @@ app.get('/admin/download/:storeId/:docId', (req, res) => {
   res.download(doc.file_path, doc.original_name);
 });
 
+// 사용승낙서·재직증명서 재생성 — 저장된 매장 정보로 다시 만든다(양식/로직 변경 후 갱신용).
+app.post('/admin/regenerate-docs/:storeId', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  try {
+    const consentPath = path.join(GENERATED_ROOT, store.id, '사용승낙서.pdf');
+    await generateConsentDoc(store, consentPath);
+    removeDocumentsOfType(store.id, DOC_TYPES.CONSENT);
+    addDocument({ store_id: store.id, doc_type: DOC_TYPES.CONSENT, original_name: '사용승낙서.pdf', file_path: consentPath, source: 'auto:generated' });
+
+    const certPath = path.join(GENERATED_ROOT, store.id, '재직증명서.pdf');
+    await generateEmploymentCert(store, certPath);
+    removeDocumentsOfType(store.id, DOC_TYPES.EMPLOYMENT_CERT);
+    addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: '재직증명서.pdf', file_path: certPath, source: 'auto:generated' });
+
+    res.redirect('/admin');
+  } catch (err) {
+    res.status(500).send('서류 재생성 실패: ' + err.message);
+  }
+});
+
+// 계약서 후보 미리보기 — 첨부 전에 모두싸인 완료 PDF를 내려받아 인라인으로 보여준다.
+app.get('/admin/candidate-preview/:storeId/:documentId', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  try {
+    const tmpPath = path.join(GENERATED_ROOT, store.id, '_preview', `${req.params.documentId}.pdf`);
+    await downloadSignedPdf(req.params.documentId, tmpPath);
+    res.setHeader('Content-Disposition', 'inline; filename="contract-preview.pdf"');
+    res.sendFile(path.resolve(tmpPath));
+  } catch (err) {
+    res.status(500).send('계약서 미리보기 실패: ' + err.message);
+  }
+});
+
 // 서류 미리보기 — 브라우저에서 인라인으로 열기(PDF/이미지는 미리보기, 그 외는 다운로드).
 app.get('/admin/view/:storeId/:docId', (req, res) => {
   const docs = getDocumentsForStore(req.params.storeId);

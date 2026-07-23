@@ -64,7 +64,7 @@ async function generateConsentDoc(store, outPath) {
     doc.font('krb').fontSize(15).text('전화번호 이용 승낙서', innerX, y, { width: innerW, align: 'center' });
     y = doc.y + 12;
 
-    line('kr', 11, '발신번호 명의자는 캐치테이블 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.', 10);
+    line('kr', 11, '발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.', 10);
     line('kr', 11, `발신번호 명의자 정보: ${owner}`);
     line('kr', 11, '계정 명의자 정보: 주식회사 와드');
     line('kr', 11, '목적: 마케팅메세지 발송');
@@ -78,10 +78,8 @@ async function generateConsentDoc(store, outPath) {
     doc.font('kr').fontSize(11).text(today(), innerX, y, { width: innerW, align: 'right' });
     y = doc.y + 10;
 
-    // 서명줄: "발신번호 명의자 : {대표자명} {마지막글자 손글씨}"
-    doc.font('kr').fontSize(12).text('발신번호 명의자 : ', innerX, y, { width: innerW, continued: true });
-    doc.text(`${owner}  `, { continued: true });
-    doc.font('sign').fontSize(18).text(owner.slice(-1));
+    // 서명줄: 이름만 기재 (손글씨 서명 및 (인) 미기재 — 원본 양식에서 서명/도장 부분 제거)
+    doc.font('kr').fontSize(12).text(`발신번호 명의자 : ${owner}`, innerX, y, { width: innerW });
     y = doc.y;
 
     // 내용 높이에 맞춰 테두리 박스 그리기
