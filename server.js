@@ -190,7 +190,7 @@ app.post('/admin/create-link', (req, res) => {
   res.redirect(`/admin?created=${encodeURIComponent(url)}`);
 });
 
-// 매장별 모두싸인 계약서 "후보" 목록 — 운영자가 직접 선택
+// 매장별 모두싸인 계약서 "후보" 목록 — 운영자가 직접 선택 (없으면 직접 업로드도 가능)
 app.get('/admin/contract-candidates/:storeId', async (req, res) => {
   const store = getStore(req.params.storeId);
   if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
@@ -227,6 +227,40 @@ app.post('/admin/attach-contract/:storeId', async (req, res) => {
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('계약서 첨부 실패: ' + err.message);
+  }
+});
+
+// 계약서 직접 업로드 첨부 — 모두싸인에 없는 계약서를 운영자가 파일로 직접 올린다.
+const contractUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const dir = path.join(GENERATED_ROOT, req.params.storeId);
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.pdf';
+      cb(null, `계약서_직접첨부${ext}`);
+    }
+  })
+});
+app.post('/admin/attach-contract-file/:storeId', contractUpload.single('contract_file'), (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  if (!req.file) return res.status(400).send('첨부할 계약서 파일을 선택해주세요.');
+  try {
+    removeDocumentsOfType(store.id, DOC_TYPES.CONTRACT); // 기존 계약서 교체 (단건 유지)
+    const safeName = (req.file.originalname || '계약서_직접첨부.pdf').replace(/[^\w.\-가-힣 ]/g, '_').trim();
+    addDocument({
+      store_id: store.id,
+      doc_type: DOC_TYPES.CONTRACT,
+      original_name: safeName || '계약서_직접첨부.pdf',
+      file_path: req.file.path,
+      source: 'manual:upload'
+    });
+    res.redirect('/admin');
+  } catch (err) {
+    res.status(500).send('계약서 직접 첨부 실패: ' + err.message);
   }
 });
 

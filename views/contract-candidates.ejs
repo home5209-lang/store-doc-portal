@@ -16,7 +16,7 @@
     <div class="card">
       <p class="eyebrow">계약서 후보 선택</p>
       <h1 class="title" style="font-size:20px;"><%= store.name %></h1>
-      <p class="lead">모두싸인에서 검색어와 매칭된 서명 완료 계약서입니다. 알맞은 계약서(예: 이용계약서)를 골라 첨부하세요. 다시 선택하면 교체됩니다.</p>
+      <p class="lead">모두싸인에서 검색어와 매칭된 서명 완료 계약서입니다. 알맞은 계약서(예: 이용계약서)를 골라 첨부하세요. 다시 선택하면 교체됩니다. 모두싸인에 없으면 아래에서 파일을 직접 올릴 수 있어요.</p>
 
       <% if (current) { %>
         <div class="alert" style="background:var(--success-bg);color:var(--success);margin-top:16px;">현재 첨부된 계약서: <%= current.original_name %></div>
@@ -53,6 +53,22 @@
           </form>
         </div>
       <% }) %>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <p class="eyebrow">계약서 직접 첨부</p>
+      <h2 class="title" style="font-size:16px;">모두싸인에 없는 계약서인가요?</h2>
+      <p class="lead">계약서 파일(PDF 등)을 직접 올려 첨부할 수 있습니다. 올리면 기존 계약서는 교체됩니다.</p>
+      <form method="POST" action="/admin/attach-contract-file/<%= store.id %>" enctype="multipart/form-data" style="margin-top:14px;">
+        <div class="drop">
+          <div>
+            <div class="t">계약서 파일</div>
+            <div class="d">PDF 권장 (이미지·문서 파일도 가능)</div>
+          </div>
+          <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" required />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:16px;">이 파일로 첨부</button>
+      </form>
     </div>
   </div>
 </body>
