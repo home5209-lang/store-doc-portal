@@ -366,6 +366,15 @@ app.get('/admin/download/:storeId/:docId', (req, res) => {
   res.download(doc.file_path, doc.original_name);
 });
 
+// 서류 미리보기 — 브라우저에서 인라인으로 열기(PDF/이미지는 미리보기, 그 외는 다운로드).
+app.get('/admin/view/:storeId/:docId', (req, res) => {
+  const docs = getDocumentsForStore(req.params.storeId);
+  const doc = docs.find((d) => String(d.id) === req.params.docId);
+  if (!doc || !fs.existsSync(doc.file_path)) return res.status(404).send('파일을 찾을 수 없습니다.');
+  res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(doc.original_name || 'file') + '"');
+  res.sendFile(path.resolve(doc.file_path)); // 확장자로 Content-Type 자동 설정 → 브라우저가 미리보기
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`store-doc-portal listening on http://localhost:${PORT}`);
