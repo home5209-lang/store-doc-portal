@@ -201,6 +201,19 @@
   .gd-body{padding:14px 18px 32px;overflow-y:auto;}
   .guide-fab{position:fixed;right:18px;bottom:18px;z-index:40;box-shadow:0 4px 16px rgba(251,98,32,.35);border-radius:999px;}
 
+  /* 사용자 바 / 담당자 / 활동 로그 */
+  .userbar{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:12.5px;color:var(--muted);}
+  .userbar .who{color:#4A4844;font-weight:600;}
+  .actor{font-size:11.5px;color:var(--muted);margin-top:5px;}
+  .actor b{color:#6E6A64;font-weight:600;}
+  .alog{width:100%;border-collapse:collapse;}
+  .alog th,.alog td{padding:11px 14px;font-size:12.5px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top;}
+  .alog th{background:#FAF7F4;color:#6E6A64;font-weight:600;font-size:12px;}
+  .alog tr:last-child td{border-bottom:none;}
+  .alog .u{font-weight:600;color:#4A4844;}
+  .alog .t{color:var(--muted);white-space:nowrap;}
+  .act-pill{display:inline-block;background:var(--brand-soft);color:var(--brand-strong);border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;}
+
   .gintro{font-size:13px;color:#5F5E5A;margin:0 0 6px;line-height:1.6;}
   .gstep{display:flex;gap:14px;padding:18px 0;border-bottom:1px solid var(--border);}
   .gstep:last-child{border-bottom:none;}

@@ -28,6 +28,18 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (store_id) REFERENCES stores(id)
   );
+
+  -- 활동 로그: 누가(user_*) 언제 무엇을(action) 어느 매장(store_*)에 했는지
+  CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_email TEXT,
+    user_name TEXT,
+    action TEXT NOT NULL,
+    store_id TEXT,
+    store_name TEXT,
+    detail TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
 `);
 
 // 기존 DB에 phone_numbers 컬럼이 없으면 추가 (신규 DB는 위 CREATE에 이미 포함)
@@ -133,6 +145,43 @@ function findStoreByPhone(digits) {
   );
 }
 
+// ── 활동 로그 ──────────────────────────────────────────────
+function addAudit({ user, action, store, detail }) {
+  db.prepare(
+    `INSERT INTO audit_log (user_email, user_name, action, store_id, store_name, detail)
+     VALUES (?,?,?,?,?,?)`
+  ).run(
+    (user && user.email) || null,
+    (user && user.name) || null,
+    action,
+    (store && store.id) || null,
+    (store && store.name) || null,
+    detail || null
+  );
+}
+
+// 최근 활동 목록 (최신순)
+function listAudit(limit = 200) {
+  return db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
+}
+
+// 매장별 "마지막 담당자" 맵 { storeId: {user_name, user_email, action, created_at} }
+function lastActorByStore() {
+  const rows = db
+    .prepare(
+      `SELECT a.store_id, a.user_name, a.user_email, a.action, a.created_at
+       FROM audit_log a
+       JOIN (SELECT store_id, MAX(id) AS mid FROM audit_log WHERE store_id IS NOT NULL GROUP BY store_id) m
+         ON a.id = m.mid`
+    )
+    .all();
+  const map = {};
+  rows.forEach((r) => {
+    map[r.store_id] = r;
+  });
+  return map;
+}
+
 module.exports = {
   db,
   DOC_TYPES,
@@ -145,5 +194,8 @@ module.exports = {
   markSubmitted,
   setNhnStatus,
   setNhnResult,
-  findStoreByPhone
+  findStoreByPhone,
+  addAudit,
+  listAudit,
+  lastActorByStore
 };

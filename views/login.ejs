@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<%- include('partials/head', { title: '로그인 - 발신번호 등록 관리자' }) %>
+</head>
+<body>
+  <div class="wrap">
+    <div class="center" style="margin-top:96px;">
+      <div class="brand" style="justify-content:center;margin-bottom:26px;">
+        <span class="dot">C</span>
+        <span class="name">캐치테이블</span>
+        <span class="sub" style="margin-left:0;">발신번호 등록 · 관리자</span>
+      </div>
+
+      <div class="card" style="text-align:center;">
+        <p class="eyebrow">관리자 로그인</p>
+        <h1 class="title" style="font-size:20px;">회사 계정으로 로그인</h1>
+        <p class="lead"><%= domain %> 구글 계정으로 로그인하면, 작업 내역이 담당자별로 기록됩니다.</p>
+
+        <% if (error) { %>
+          <div class="alert alert-error" style="margin-top:16px;"><%= error %></div>
+        <% } %>
+
+        <% if (configured) { %>
+          <a class="btn btn-primary btn-block" href="/auth/google" style="margin-top:20px;">Google로 로그인</a>
+        <% } else { %>
+          <div class="alert" style="background:var(--warn-bg);color:var(--warn);margin-top:18px;text-align:left;">
+            구글 로그인이 아직 설정되지 않았습니다.<br />관리자가 <code>GOOGLE_CLIENT_ID</code> / <code>GOOGLE_CLIENT_SECRET</code>를 설정한 뒤 서버를 재시작하면 활성화됩니다.
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

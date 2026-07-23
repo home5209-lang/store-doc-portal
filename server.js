@@ -17,12 +17,15 @@ const {
   markSubmitted,
   setNhnStatus,
   setNhnResult,
-  findStoreByPhone
+  findStoreByPhone,
+  addAudit,
+  listAudit,
+  lastActorByStore
 } = require('./db');
 const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
-const { requireAdminAuth } = require('./auth');
+const googleAuth = require('./authGoogle');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -152,17 +155,76 @@ app.post(
 );
 
 // -------------------------------------------------------------------------
-// 관리자용: 매장별 진행 현황 + 서류 다운로드
-// ADMIN_USER / ADMIN_PASS 환경변수로 로그인해야 접근 가능 (Basic Auth)
+// 로그인 (구글/회사 SSO) — catchtable.co.kr 계정만 허용
 // -------------------------------------------------------------------------
-app.use('/admin', requireAdminAuth);
+app.get('/login', (req, res) => {
+  if (googleAuth.getSession(req)) return res.redirect('/admin');
+  res.render('login', {
+    configured: googleAuth.isConfigured(),
+    domain: googleAuth.ALLOWED_DOMAIN,
+    error: req.query.error || null
+  });
+});
+
+app.get('/auth/google', (req, res) => {
+  if (!googleAuth.isConfigured()) {
+    return res.redirect('/login?error=' + encodeURIComponent('구글 로그인이 설정되지 않았습니다. 관리자에게 문의하세요.'));
+  }
+  res.redirect(googleAuth.getAuthUrl(res));
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect('/login?error=' + encodeURIComponent(String(error)));
+  if (!code || !googleAuth.checkState(req, state)) {
+    return res.redirect('/login?error=' + encodeURIComponent('로그인 요청이 유효하지 않습니다. 다시 시도해주세요.'));
+  }
+  try {
+    const user = await googleAuth.exchangeCodeForUser(code);
+    googleAuth.setSession(res, user);
+    addAudit({ user, action: '로그인' });
+    res.redirect('/admin');
+  } catch (e) {
+    res.redirect('/login?error=' + encodeURIComponent(e.message));
+  }
+});
+
+app.get('/auth/logout', (req, res) => {
+  googleAuth.clearSession(res);
+  res.redirect('/login');
+});
+
+// -------------------------------------------------------------------------
+// 관리자용: 로그인 세션 필요 (미로그인 시 로그인 페이지로)
+// -------------------------------------------------------------------------
+function requireLogin(req, res, next) {
+  const user = googleAuth.getSession(req);
+  if (user) {
+    req.user = user;
+    return next();
+  }
+  if (req.method === 'GET') return res.redirect('/login');
+  return res.status(401).send('로그인이 필요합니다.');
+}
+app.use('/admin', requireLogin);
 
 app.get('/admin', (req, res) => {
   const stores = listStores().map((s) => ({
     ...s,
     documents: getDocumentsForStore(s.id)
   }));
-  res.render('admin', { stores, docTypes: DOC_TYPES, createdLink: req.query.created || null });
+  res.render('admin', {
+    stores,
+    docTypes: DOC_TYPES,
+    createdLink: req.query.created || null,
+    currentUser: req.user,
+    lastActor: lastActorByStore()
+  });
+});
+
+// 전체 활동 로그 (누가·언제·무엇을·어느 매장)
+app.get('/admin/activity', (req, res) => {
+  res.render('activity', { entries: listAudit(300), currentUser: req.user });
 });
 
 // 매장별 업로드 링크 발급/재발급. storeId가 오면 기존 매장에 새 토큰만 발급하고,
@@ -187,6 +249,7 @@ app.post('/admin/create-link', (req, res) => {
 
   const token = generateUploadToken(storeId);
   const url = `${req.protocol}://${req.get('host')}/upload/${storeId}/${token}`;
+  addAudit({ user: req.user, action: existingId ? '업로드 링크 재발급' : '업로드 링크 발급', store: getStore(storeId) });
   res.redirect(`/admin?created=${encodeURIComponent(url)}`);
 });
 
@@ -224,6 +287,7 @@ app.post('/admin/attach-contract/:storeId', async (req, res) => {
       file_path: outPath,
       source: 'manual:modusign'
     });
+    addAudit({ user: req.user, action: '계약서 첨부(모두싸인)', store, detail: title || '' });
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('계약서 첨부 실패: ' + err.message);
@@ -258,6 +322,7 @@ app.post('/admin/attach-contract-file/:storeId', contractUpload.single('contract
       file_path: req.file.path,
       source: 'manual:upload'
     });
+    addAudit({ user: req.user, action: '계약서 직접 첨부', store, detail: safeName });
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('계약서 직접 첨부 실패: ' + err.message);
@@ -305,6 +370,9 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
     const result = await submitSenderNumber({ phone, files, dryRun: !realSubmit, headless });
     if (realSubmit && result && result.submitted) {
       setNhnStatus(store.id, 'requested');
+      addAudit({ user: req.user, action: 'NHN 등록 신청(실제 제출)', store, detail: phone });
+    } else {
+      addAudit({ user: req.user, action: 'NHN 등록 신청(드라이런)', store, detail: phone });
     }
     res.redirect('/admin');
   } catch (e) {
@@ -381,6 +449,8 @@ app.post('/admin/regenerate-docs/:storeId', async (req, res) => {
     removeDocumentsOfType(store.id, DOC_TYPES.EMPLOYMENT_CERT);
     addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: '재직증명서.pdf', file_path: certPath, source: 'auto:generated' });
 
+    console.log(`[재생성] ${store.name} 승낙서/재직증명서 다시 생성 완료`);
+    addAudit({ user: req.user, action: '서류 재생성', store });
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('서류 재생성 실패: ' + err.message);
@@ -406,6 +476,7 @@ app.get('/admin/view/:storeId/:docId', (req, res) => {
   const docs = getDocumentsForStore(req.params.storeId);
   const doc = docs.find((d) => String(d.id) === req.params.docId);
   if (!doc || !fs.existsSync(doc.file_path)) return res.status(404).send('파일을 찾을 수 없습니다.');
+  res.setHeader('Cache-Control', 'no-store, must-revalidate'); // 재생성 후 옛 파일 캐시 방지
   res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(doc.original_name || 'file') + '"');
   res.sendFile(path.resolve(doc.file_path)); // 확장자로 Content-Type 자동 설정 → 브라우저가 미리보기
 });
