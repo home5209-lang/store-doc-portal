@@ -37,38 +37,81 @@ function shotDir() {
   return SHOT_DIR;
 }
 
-// 발신번호 목록 표가 들어있는 프레임을 찾는다 (교차출처 iframe).
+// 발신번호 목록이 들어있는 콘솔 콘텐츠 iframe을 찾는다.
+// NHN 콘솔은 실제 화면을 교차출처 iframe(#productIframe, url에 sender-phone-number-verification
+// 또는 address-book 포함)에 담는다. 바깥 네비게이션 프레임이 아니라 이 안쪽 프레임을 잡아야 한다.
 async function findListFrame(page, log, timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
-  let best = null;
   while (Date.now() < deadline) {
-    for (const f of page.frames()) {
+    const frames = page.frames();
+    // 1순위: URL로 콘텐츠 iframe 식별
+    const byUrl = frames.find((f) =>
+      /sender-phone-number-verification|address-book/.test(f.url() || '')
+    );
+    if (byUrl) return byUrl;
+    // 2순위: 최상위가 아니면서 발신번호 관련 텍스트가 있는 프레임
+    for (const f of frames) {
+      if (f === page.mainFrame()) continue;
       try {
-        const txt = await f.evaluate(() => document.body ? document.body.innerText : '');
-        if (/발신번호/.test(txt)) {
-          const rows = await f.locator('tr, [role="row"]').count().catch(() => 0);
-          if (!best || rows > best.rows) best = { frame: f, rows };
-        }
+        const txt = await f.evaluate(() => (document.body ? document.body.innerText : ''));
+        if (/발신번호|전화번호/.test(txt)) return f;
       } catch (e) {
-        /* frame detached */
+        /* cross-origin/detached */
       }
     }
-    if (best) return best.frame;
     await page.waitForTimeout(600);
   }
   throw new Error(
-    '발신번호 목록 화면을 찾지 못했습니다. (로그인 세션 만료 또는 화면 구조 변경) — node nhn/capture-session.js 로 세션 재저장 후 다시 시도하세요.'
+    '발신번호 목록 화면(콘텐츠 iframe)을 찾지 못했습니다. (로그인 세션 만료 또는 화면 구조 변경) — node nhn/capture-session.js 로 세션 재저장 후 다시 시도하세요.'
   );
 }
 
-// 프레임 안에서 표의 각 행을 읽어 {phone, statusText, rowText} 배열을 만든다.
+// 프레임 안에서 "발신번호 등록 요청 내역" 표의 데이터 행 텍스트 배열을 만든다.
+// 화면에는 표가 여러 개(서류 안내표 등) 있으므로, 헤더에 "상태" 컬럼이 있는 표
+// (= 요청 내역 표: 번호 종류 / 번호 / 상태 / 인증 요청 일시 / 인증 일시)만 고른다.
 async function readRows(frame) {
   return frame.evaluate(() => {
-    const rowsEls = Array.from(document.querySelectorAll('tr, [role="row"]'));
+    const norm = (t) => (t || '').replace(/\s+/g, ' ').trim();
+    const tables = Array.from(document.querySelectorAll('table'));
+    // "상태" 헤더가 있는 표 우선 선택
+    let target = null;
+    for (const tb of tables) {
+      const headText = norm(
+        Array.from(tb.querySelectorAll('thead th, thead td, tr:first-child th, tr:first-child td'))
+          .map((c) => c.innerText)
+          .join(' ')
+      );
+      if (/상태/.test(headText) && /번호/.test(headText)) {
+        target = tb;
+        break;
+      }
+    }
     const out = [];
-    for (const r of rowsEls) {
-      const text = (r.innerText || '').replace(/\s+/g, ' ').trim();
-      if (text) out.push(text);
+    const seen = new Set();
+    const push = (t) => {
+      const s = norm(t);
+      if (s && !seen.has(s)) {
+        seen.add(s);
+        out.push(s);
+      }
+    };
+    if (target) {
+      const bodyRows = target.querySelectorAll('tbody tr');
+      const rows = bodyRows.length ? Array.from(bodyRows) : Array.from(target.querySelectorAll('tr')).slice(1);
+      for (const r of rows) {
+        const txt = norm(r.innerText);
+        if (!txt || /요청 내역이 없습니다|총 0건/.test(txt)) continue;
+        push(txt);
+      }
+      return out; // 요청 내역 표를 찾았으면 (비어있어도) 이걸로 확정
+    }
+    // 폴백: 상태 표를 못 찾은 경우 모든 tr / 그리드 행
+    for (const sel of ['tbody tr', 'tr', '[role="row"]', '.grid-row', '.list-row']) {
+      const els = Array.from(document.querySelectorAll(sel));
+      if (els.length) {
+        for (const el of els) push(el.innerText);
+        if (out.length) return out;
+      }
     }
     return out;
   });
@@ -94,14 +137,20 @@ async function scrapeStatuses({ headless = true, log = console.log } = {}) {
       const phone = extractPhone(raw);
       const status = classifyStatus(raw);
       if (!phone || !status) continue;
-      // 반려 사유(있으면): 행 텍스트에서 번호/상태 키워드 뒤 남은 부분을 후보로 (best-effort)
+      // 반려 사유(있으면): 행에서 번호/상태/번호종류/날짜를 걷어낸 나머지를 후보로 (best-effort).
+      // 요청 내역 표에는 별도 사유 컬럼이 없어 대개 비게 되며, 그 경우 null.
       let reason = null;
       if (status === 'rejected') {
-        reason = raw
-          .replace(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/, '')
-          .replace(/(반려|거부|거절|실패|반송)/, '')
-          .replace(/\s+/g, ' ')
-          .trim() || null;
+        reason =
+          raw
+            .replace(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g, '')
+            .replace(/(반려|거부|거절|실패|반송)/g, '')
+            .replace(/(사업자|법인|대표자|임직원|타사|타인)\s*(명의)?\s*번호/g, '')
+            .replace(/\d{4}[-.]\d{2}[-.]\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/g, '') // 날짜/시각
+            .replace(/서류 인증/g, '')
+            .replace(/[|·\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim() || null;
       }
       results.push({ phone, status, reason, raw });
     }
@@ -123,7 +172,14 @@ async function probe({ headless = false, log = console.log } = {}) {
   const page = await context.newPage();
   try {
     await page.goto(PROJECT_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500); // 콘솔 iframe 로딩 대기
+    // 진단: 모든 프레임 URL 기록
+    const frameUrls = page.frames().map((f) => f.url());
+    fs.writeFileSync(path.join(dir, 'frames.json'), JSON.stringify(frameUrls, null, 2), 'utf8');
+    log(`프레임 ${frameUrls.length}개:`);
+    frameUrls.forEach((u) => log('   · ' + u));
     const frame = await findListFrame(page, log);
+    log('선택된 프레임 URL: ' + frame.url());
     await page.waitForTimeout(1500);
     const text = await frame.evaluate(() => (document.body ? document.body.innerText : ''));
     const html = await frame.content();
