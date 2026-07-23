@@ -54,34 +54,82 @@
         </div>
 
         <hr class="divider" />
-        <p class="section-label">첨부 서류</p>
+        <p class="section-label">첨부 서류 (2개만 올리면 됩니다)</p>
 
-        <div class="drop">
-          <div>
-            <div class="t">통신서비스 이용증명원 <span class="req">*</span></div>
-            <div class="d">통신사에서 발급받은 파일을 첨부해주세요</div>
-          </div>
+        <label class="up">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </span>
+          <span class="meta">
+            <span class="t">통신서비스 이용증명원 <span class="req">*</span></span>
+            <span class="d">통신사에서 발급받은 파일 · 최근 3개월 이내</span>
+            <span class="fname"></span>
+          </span>
+          <span class="pill">파일 선택</span>
           <input type="file" name="telecom_proof" required />
-        </div>
+        </label>
 
-        <div class="drop">
-          <div>
-            <div class="t">사업자 등록증 <span class="req">*</span></div>
-            <div class="d">3개월 이내 발급본</div>
-          </div>
+        <label class="up">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </span>
+          <span class="meta">
+            <span class="t">사업자 등록증 <span class="req">*</span></span>
+            <span class="d">3개월 이내 발급본</span>
+            <span class="fname"></span>
+          </span>
+          <span class="pill">파일 선택</span>
           <input type="file" name="biz_reg" required />
-        </div>
+        </label>
 
         <hr class="divider" />
         <p class="section-label">자동으로 준비되는 서류</p>
 
-        <div class="auto"><span class="t">캐치테이블 이용계약서</span><span class="badge gray">관리자 확인</span></div>
-        <div class="auto"><span class="t">사용 승낙서</span><span class="badge green">자동 생성</span></div>
-        <div class="auto"><span class="t">재직 증명서</span><span class="badge green">자동 생성</span></div>
+        <div class="auto">
+          <span class="left">
+            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+            <span class="t">캐치테이블 이용계약서</span>
+          </span>
+          <span class="badge gray">관리자 확인</span>
+        </div>
+        <div class="auto">
+          <span class="left">
+            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span class="t">사용 승낙서</span>
+          </span>
+          <span class="badge green">자동 생성</span>
+        </div>
+        <div class="auto">
+          <span class="left">
+            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span class="t">재직 증명서</span>
+          </span>
+          <span class="badge green">자동 생성</span>
+        </div>
 
         <button class="btn btn-primary btn-block" type="submit" style="margin-top:22px;">제출하기</button>
       </form>
     </div>
   </div>
+
+  <script>
+    // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 스타일
+    document.querySelectorAll('.up input[type=file]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        var tile = input.closest('.up');
+        var fname = tile.querySelector('.fname');
+        var pill = tile.querySelector('.pill');
+        if (input.files && input.files.length) {
+          tile.classList.add('filled');
+          fname.textContent = '✓ ' + input.files[0].name;
+          if (pill) pill.textContent = '변경';
+        } else {
+          tile.classList.remove('filled');
+          fname.textContent = '';
+          if (pill) pill.textContent = '파일 선택';
+        }
+      });
+    });
+  </script>
 </body>
 </html>

@@ -60,16 +60,40 @@
       <h2 class="title" style="font-size:16px;">모두싸인에 없는 계약서인가요?</h2>
       <p class="lead">계약서 파일(PDF 등)을 직접 올려 첨부할 수 있습니다. 올리면 기존 계약서는 교체됩니다.</p>
       <form method="POST" action="/admin/attach-contract-file/<%= store.id %>" enctype="multipart/form-data" style="margin-top:14px;">
-        <div class="drop">
-          <div>
-            <div class="t">계약서 파일</div>
-            <div class="d">PDF 권장 (이미지·문서 파일도 가능)</div>
-          </div>
+        <label class="up">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </span>
+          <span class="meta">
+            <span class="t">계약서 파일</span>
+            <span class="d">PDF 권장 (이미지·문서 파일도 가능)</span>
+            <span class="fname"></span>
+          </span>
+          <span class="pill">파일 선택</span>
           <input type="file" name="contract_file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" required />
-        </div>
+        </label>
         <button class="btn btn-primary btn-block" type="submit" style="margin-top:16px;">이 파일로 첨부</button>
       </form>
     </div>
   </div>
+
+  <script>
+    document.querySelectorAll('.up input[type=file]').forEach(function (input) {
+      input.addEventListener('change', function () {
+        var tile = input.closest('.up');
+        var fname = tile.querySelector('.fname');
+        var pill = tile.querySelector('.pill');
+        if (input.files && input.files.length) {
+          tile.classList.add('filled');
+          fname.textContent = '✓ ' + input.files[0].name;
+          if (pill) pill.textContent = '변경';
+        } else {
+          tile.classList.remove('filled');
+          fname.textContent = '';
+          if (pill) pill.textContent = '파일 선택';
+        }
+      });
+    });
+  </script>
 </body>
 </html>
