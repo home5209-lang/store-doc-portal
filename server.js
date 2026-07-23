@@ -381,6 +381,7 @@ app.post('/admin/regenerate-docs/:storeId', async (req, res) => {
     removeDocumentsOfType(store.id, DOC_TYPES.EMPLOYMENT_CERT);
     addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: '재직증명서.pdf', file_path: certPath, source: 'auto:generated' });
 
+    console.log(`[재생성] ${store.name} 승낙서/재직증명서 다시 생성 완료`);
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('서류 재생성 실패: ' + err.message);
@@ -406,6 +407,7 @@ app.get('/admin/view/:storeId/:docId', (req, res) => {
   const docs = getDocumentsForStore(req.params.storeId);
   const doc = docs.find((d) => String(d.id) === req.params.docId);
   if (!doc || !fs.existsSync(doc.file_path)) return res.status(404).send('파일을 찾을 수 없습니다.');
+  res.setHeader('Cache-Control', 'no-store, must-revalidate'); // 재생성 후 옛 파일 캐시 방지
   res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(doc.original_name || 'file') + '"');
   res.sendFile(path.resolve(doc.file_path)); // 확장자로 Content-Type 자동 설정 → 브라우저가 미리보기
 });

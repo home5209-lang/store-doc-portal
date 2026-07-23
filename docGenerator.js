@@ -36,54 +36,73 @@ function renderToBuffer(build) {
   });
 }
 
-// ---------- 1. 전화번호 이용 승낙서 (회사 원본 샘플 양식 재현) ----------
-// 빈칸만 매장 정보로 채움: 명의자 정보(대표자명) / 전화번호 목록 / 서명(대표자명 + 마지막 글자 손글씨)
+// ---------- 1. 전화번호 이용 승낙서 (회사 원본 샘플 양식 그대로 재현) ----------
+// 원본 레이아웃: 제목(박스 밖) → 테두리 박스 안에 [소제목(좌) · 안내문 · • 5개 항목 ·
+//   별첨 하위 1)~4) 번호 · 하단 서명]. 빈칸(명의자 정보/전화번호 목록/서명 이름)만 채움.
+//   서명은 손글씨/(인) 없이 이름만 기재. 날짜 없음.
 async function generateConsentDoc(store, outPath) {
   const owner = store.owner_name || ''; // 발신번호 명의자 = 대표자명(통신증명원 기준)
   const phones = store.phone_numbers || '';
 
   const buffer = await renderToBuffer((doc) => {
-    // 제목 (박스 바깥)
+    // 제목 (박스 바깥, 왼쪽)
     doc.font('krb').fontSize(12).text('<전화번호 이용 승낙서 – 사업자(타사 소속 임직원 포함)>');
-    doc.moveDown(0.6);
+    doc.moveDown(0.7);
 
     // 테두리 박스 좌표
     const boxX = doc.page.margins.left;
     const boxTop = doc.y;
     const boxW = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const pad = 16;
+    const pad = 18;
     const innerX = boxX + pad;
     const innerW = boxW - pad * 2;
-    let y = boxTop + pad;
 
-    const line = (font, size, text, gap) => {
-      doc.font(font).fontSize(size).text(text, innerX, y, { width: innerW });
-      y = doc.y + (gap == null ? 4 : gap);
+    // 일반 문단 (현재 doc.y에서 시작, 아래 여백 gap)
+    const para = (text, { font = 'kr', size = 11, gap = 6, x = innerX, width = innerW } = {}) => {
+      doc.font(font).fontSize(size).text(text, x, doc.y, { width, lineGap: 3 });
+      doc.y += gap;
+    };
+    const blank = (h = 12) => { doc.y += h; };
+
+    // 마커(• 또는 1))가 붙는 항목: 마커는 markerX, 본문은 textX부터(줄바꿈 시 본문 정렬 유지)
+    const item = (marker, text, { markerX = innerX, textX = innerX + 18, size = 11, gap = 7 } = {}) => {
+      const startY = doc.y;
+      doc.font('kr').fontSize(size);
+      doc.text(marker, markerX, startY, { width: textX - markerX });
+      doc.text(text, textX, startY, { width: innerW - (textX - innerX), lineGap: 3 });
+      doc.y += gap; // 본문(둘 중 더 긴 쪽) 기준으로 doc.y가 잡혀 있음
     };
 
-    doc.font('krb').fontSize(15).text('전화번호 이용 승낙서', innerX, y, { width: innerW, align: 'center' });
-    y = doc.y + 12;
+    doc.y = boxTop + pad;
 
-    line('kr', 11, '발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.', 10);
-    line('kr', 11, `발신번호 명의자 정보: ${owner}`);
-    line('kr', 11, '계정 명의자 정보: 주식회사 와드');
-    line('kr', 11, '목적: 마케팅메세지 발송');
-    line('kr', 11, `전화번호 목록: ${phones}`);
-    line('kr', 11, '별첨: 아래와 같은 서류를 함께 제출할 것');
-    line('kr', 11, '· 통신서비스이용증명원(전화번호 목록 내 기재되어 있는 전화번호와 모두 일치할 것)');
-    line('kr', 11, '· 사업자등록증');
-    line('kr', 11, '· 발신번호 명의자와 계정 명의자 간 관계를 확인할 수 있는 문서(예. 업무위수탁 계약서. 본점 – 지점 증빙서류 등)');
-    line('kr', 11, '· 전화번호 목록에 임직원의 번호가 포함된 경우 해당 임직원의 재직증명서', 18);
+    para('전화번호 이용 승낙서', { font: 'krb', size: 13, gap: 4 });
+    blank(10);
 
-    doc.font('kr').fontSize(11).text(today(), innerX, y, { width: innerW, align: 'right' });
-    y = doc.y + 10;
+    para('발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.', { gap: 6 });
+    blank(8);
 
-    // 서명줄: 이름만 기재 (손글씨 서명 및 (인) 미기재 — 원본 양식에서 서명/도장 부분 제거)
-    doc.font('kr').fontSize(12).text(`발신번호 명의자 : ${owner}`, innerX, y, { width: innerW });
-    y = doc.y;
+    // • 5개 항목
+    item('•', `발신번호 명의자 정보: ${owner}`);
+    item('•', '계정 명의자 정보: 주식회사 와드');
+    item('•', '목적: 마케팅메세지 발송');
+    item('•', `전화번호 목록: ${phones}`);
+    item('•', '별첨: 아래와 같은 서류를 함께 제출할 것');
+
+    // 별첨 하위: 1)~4) (한 단계 더 들여쓰기)
+    const nX = innerX + 20;
+    const nText = innerX + 42;
+    item('1)', '통신서비스이용증명원(전화번호 목록 내 기재되어 있는 전화번호와 모두 일치할 것)', { markerX: nX, textX: nText });
+    item('2)', '사업자등록증', { markerX: nX, textX: nText });
+    item('3)', '발신번호 명의자와 계정 명의자 간 관계를 확인할 수 있는 문서(예. 업무위수탁 계약서. 본점 – 지점 증빙서류 등)', { markerX: nX, textX: nText });
+    item('4)', '전화번호 목록에 임직원의 번호가 포함된 경우 해당 임직원의 재직증명서', { markerX: nX, textX: nText });
+
+    blank(30); // 서명 전 여백(원본의 빈 줄 2개)
+
+    // 하단 서명: 이름만 (손글씨/(인) 없음)
+    para(`발신번호 명의자 : ${owner}`, { size: 12, gap: 4 });
 
     // 내용 높이에 맞춰 테두리 박스 그리기
-    doc.lineWidth(1).rect(boxX, boxTop, boxW, y + pad - boxTop).stroke();
+    doc.lineWidth(1).rect(boxX, boxTop, boxW, doc.y + pad - boxTop).stroke();
   });
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
