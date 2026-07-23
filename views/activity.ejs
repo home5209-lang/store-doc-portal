@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<%- include('partials/head', { title: '활동 로그 - 관리자' }) %>
+</head>
+<body>
+  <div class="wrap-wide">
+    <div class="brand">
+      <span class="dot">C</span>
+      <span class="name">캐치테이블</span>
+      <span class="sub">발신번호 등록 · 관리자</span>
+      <span class="userbar">
+        <span class="who"><%= currentUser ? currentUser.name : '' %></span>
+        <a class="btn btn-ghost btn-sm" href="/admin">← 대시보드</a>
+        <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
+      </span>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <p class="eyebrow">활동 로그</p>
+      <h1 class="title" style="font-size:19px;">누가 · 언제 · 무엇을</h1>
+      <p class="lead">건별 작업 내역입니다. 최근 300건까지 표시됩니다.</p>
+    </div>
+
+    <div class="table-card">
+      <% if (!entries || entries.length === 0) { %>
+        <div class="empty">아직 기록된 활동이 없어요.</div>
+      <% } else { %>
+        <table class="alog">
+          <thead>
+            <tr><th>시각</th><th>담당자</th><th>작업</th><th>매장</th><th>비고</th></tr>
+          </thead>
+          <tbody>
+            <% entries.forEach(function (e) { %>
+              <tr>
+                <td class="t"><%= e.created_at %></td>
+                <td class="u"><%= e.user_name || e.user_email || '-' %></td>
+                <td><span class="act-pill"><%= e.action %></span></td>
+                <td><%= e.store_name || '-' %></td>
+                <td style="color:var(--muted);"><%= e.detail || '' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

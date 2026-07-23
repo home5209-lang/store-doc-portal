@@ -12,6 +12,13 @@
         발신번호 등록 · 관리자
         <button type="button" class="btn btn-ghost btn-sm" onclick="openGuide()">❔ 사용 가이드</button>
       </span>
+      <span class="userbar">
+        <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+          <span class="who"><%= currentUser.name %></span>
+        <% } %>
+        <a class="btn btn-ghost btn-sm" href="/admin/activity">활동 로그</a>
+        <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
+      </span>
     </div>
 
     <%
@@ -73,6 +80,10 @@
               <% types.forEach(t => { %><span class="dot <%= hasDoc(store, t) ? 'on' : 'off' %>"></span><% }) %>
               <span style="font-size:12px;color:var(--muted);margin-left:6px;">서류 <%= count %>/<%= types.length %></span>
             </div>
+            <% var la = (typeof lastActor !== 'undefined' && lastActor) ? lastActor[store.id] : null; %>
+            <% if (la) { %>
+              <div class="actor">최근: <b><%= la.user_name || la.user_email %></b> · <%= la.action %> · <%= la.created_at %></div>
+            <% } %>
           </div>
 
           <div class="actions-col">
