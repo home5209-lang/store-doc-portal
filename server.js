@@ -228,21 +228,55 @@ app.post('/admin/attach-contract/:storeId', async (req, res) => {
   }
 });
 
-// 운영자 검토 후 NHN 발신번호 등록 신청. 서류 5종이 모두 모였을 때만 가능.
-// (지금은 신청 상태만 기록. 실제 NHN 콘솔 자동 제출 로봇은 이후 여기에 연결한다.)
+// 운영자 검토 후 NHN 발신번호 등록 신청 — Playwright 봇(nhn/nhnBot.js)이 콘솔을 자동 조작.
+//  · 기본: 드라이런(제출 직전까지만) — 안전
+//  · 환경변수 NHN_SUBMIT=1 일 때만 실제 "발신번호 등록 심사 요청" 제출
+//  · 사전 준비: `node nhn/capture-session.js` 로 NHN 로그인 세션 저장
 app.post('/admin/nhn-submit/:storeId', async (req, res) => {
   const store = getStore(req.params.storeId);
   if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
 
   const docs = getDocumentsForStore(store.id);
-  const allReady = Object.values(DOC_TYPES).every((t) => docs.some((d) => d.doc_type === t));
-  if (!allReady) return res.status(400).send('서류 5종이 모두 모여야 신청할 수 있습니다.');
+  const pathOf = (type) => {
+    const d = docs.find((x) => x.doc_type === type);
+    return d ? d.file_path : null;
+  };
+  // NHN "타사 번호" 서류 칸 ↔ 매장 서류 매핑
+  const files = {
+    telecomProof: pathOf(DOC_TYPES.TELECOM_PROOF), // 통신서비스 이용증명원
+    consent: pathOf(DOC_TYPES.CONSENT), // 이용승낙서
+    bizReg: pathOf(DOC_TYPES.BIZ_REG), // 타사 사업자등록증
+    contract: pathOf(DOC_TYPES.CONTRACT), // 관계 확인 문서(이용계약서)
+    employmentCert: pathOf(DOC_TYPES.EMPLOYMENT_CERT) // 기타 서류(재직증명서)
+  };
+  const missing = Object.entries(files)
+    .filter(([, p]) => !p || !fs.existsSync(p))
+    .map(([k]) => k);
+  if (missing.length) {
+    return res.status(400).send('서류가 모두 준비되지 않았습니다: ' + missing.join(', '));
+  }
+  if (!store.phone_numbers) {
+    return res.status(400).send('발신번호가 없습니다. 업로드 폼에서 발신번호를 입력받아야 합니다.');
+  }
 
-  // TODO(B): NHN 콘솔 자동 제출 로봇 연결 지점.
-  //   await submitToNhn(store, docs);  // 로그인 → 서류 업로드 → 제출
-  // 지금은 "신청함" 상태로만 표시하고, 실제 제출은 로봇 완성 후 이 자리에서 수행한다.
-  setNhnStatus(store.id, 'requested');
-  res.redirect('/admin');
+  const realSubmit = process.env.NHN_SUBMIT === '1';
+  const headless = process.env.NHN_HEADLESS === '1';
+  const phone = String(store.phone_numbers).split(/[,/\n]/)[0].trim(); // 첫 번호 사용
+
+  try {
+    // playwright 미설치 시 서버 기동엔 영향 없도록 지연 로드
+    const { submitSenderNumber } = require('./nhn/nhnBot');
+    const result = await submitSenderNumber({ phone, files, dryRun: !realSubmit, headless });
+    if (realSubmit && result && result.submitted) {
+      setNhnStatus(store.id, 'requested');
+    }
+    res.redirect('/admin');
+  } catch (e) {
+    const hint = /세션|session|storageState|nhn-session/.test(e.message)
+      ? '\n\nNHN 로그인 세션 문제일 수 있어요 → 터미널에서 `node nhn/capture-session.js` 재실행 후 다시 시도하세요.'
+      : '\n\nnhn/shots/error.png 스크린샷으로 어디서 멈췄는지 확인할 수 있어요.';
+    res.status(500).send('NHN 자동화 실패: ' + e.message + hint);
+  }
 });
 
 app.get('/admin/download/:storeId/:docId', (req, res) => {
