@@ -15,7 +15,9 @@ const {
   getDocumentsForStore,
   removeDocumentsOfType,
   markSubmitted,
-  setNhnStatus
+  setNhnStatus,
+  setNhnResult,
+  findStoreByPhone
 } = require('./db');
 const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
@@ -279,6 +281,50 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
   }
 });
 
+// ── NHN 심사 결과 주기 동기화 ──────────────────────────────────────────────
+// NHN은 API가 없어 콘솔의 "발신번호 목록"을 봇이 읽어와 매장별 상태를 갱신한다.
+// 상태: requested(심사중) → registered(등록완료) / rejected(반려, 사유 포함)
+let nhnSyncRunning = false;
+async function runNhnSync(log = console.log) {
+  if (nhnSyncRunning) {
+    log('[nhn-sync] 이전 조회가 아직 진행 중 — 건너뜀');
+    return { skipped: true };
+  }
+  nhnSyncRunning = true;
+  try {
+    const { scrapeStatuses } = require('./nhn/syncStatus');
+    const headless = process.env.NHN_HEADLESS !== '0'; // 주기 동기화는 기본 headless
+    const rows = await scrapeStatuses({ headless, log });
+    let updated = 0;
+    for (const r of rows) {
+      const store = findStoreByPhone(r.phone);
+      if (!store) continue;
+      if (store.nhn_status !== r.status || (r.reason && store.nhn_reject_reason !== r.reason)) {
+        setNhnResult(store.id, r.status, r.reason);
+        updated += 1;
+        log(`[nhn-sync] ${store.name} (${r.phone}) → ${r.status}${r.reason ? ' / ' + r.reason : ''}`);
+      }
+    }
+    log(`[nhn-sync] 완료: ${rows.length}건 조회, ${updated}건 갱신`);
+    return { ok: true, scanned: rows.length, updated };
+  } finally {
+    nhnSyncRunning = false;
+  }
+}
+
+// 수동 조회 (관리자 화면의 "상태 새로고침" 버튼)
+app.post('/admin/nhn-sync', async (req, res) => {
+  try {
+    await runNhnSync();
+    res.redirect('/admin');
+  } catch (e) {
+    const hint = /세션|session|storageState|nhn-session/.test(e.message)
+      ? '\n\nNHN 로그인 세션 문제일 수 있어요 → 터미널에서 `node nhn/capture-session.js` 재실행 후 다시 시도하세요.'
+      : '\n\n화면 구조가 바뀌었을 수 있어요 → `node nhn/syncStatus.js probe` 로 목록 화면을 덤프해 확인하세요.';
+    res.status(500).send('NHN 상태 조회 실패: ' + e.message + hint);
+  }
+});
+
 app.get('/admin/download/:storeId/:docId', (req, res) => {
   const docs = getDocumentsForStore(req.params.storeId);
   const doc = docs.find((d) => String(d.id) === req.params.docId);
@@ -292,4 +338,19 @@ app.listen(PORT, () => {
   const sampleId = nanoid(8);
   const sampleToken = generateUploadToken(sampleId);
   console.log(`샘플 업로드 링크: http://localhost:${PORT}/upload/${sampleId}/${sampleToken}`);
+
+  // NHN 심사 결과 자동 주기 동기화.
+  //  · NHN_SYNC=0 이면 끔 / NHN_SYNC_INTERVAL_MIN 으로 주기(분) 조정 (기본 180분)
+  //  · 로그인 세션(nhn/nhn-session.json)이 있을 때만 동작
+  const syncEnabled = process.env.NHN_SYNC !== '0';
+  const sessionExists = fs.existsSync(path.join(__dirname, 'nhn', 'nhn-session.json'));
+  if (syncEnabled && sessionExists) {
+    const minutes = Math.max(10, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '30', 10) || 30);
+    console.log(`NHN 심사 상태 자동 조회: ${minutes}분마다 실행`);
+    const tick = () => runNhnSync().catch((e) => console.error('[nhn-sync] 오류:', e.message));
+    setTimeout(tick, 15000); // 기동 15초 후 1회
+    setInterval(tick, minutes * 60 * 1000);
+  } else if (syncEnabled && !sessionExists) {
+    console.log('NHN 자동 조회 대기: 로그인 세션이 없어요 → `node nhn/capture-session.js` 실행 후 재기동하면 켜집니다.');
+  }
 });
