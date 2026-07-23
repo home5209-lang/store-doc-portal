@@ -16,6 +16,15 @@
       <h1 class="title"><%= store.name === '매장명 미입력' ? '매장 정보를 입력해주세요' : store.name %></h1>
       <p class="lead">아래 정보를 채우고 서류 2개만 올리면, 나머지 서류는 자동으로 준비됩니다.</p>
 
+      <div class="steps" aria-hidden="true" style="margin-top:16px;">
+        <span class="bar on"></span><span class="bar on"></span><span class="bar"></span>
+      </div>
+      <div class="steplabels">
+        <span class="done">✓ 매장 정보</span>
+        <span class="cur">서류 첨부</span>
+        <span>제출 완료</span>
+      </div>
+
       <% if (error) { %>
         <div class="alert alert-error" style="margin-top:16px;"><%= error %></div>
       <% } %>
@@ -54,6 +63,12 @@
         </div>
 
         <hr class="divider" />
+
+        <div class="count-callout">
+          <span class="l">직접 올릴 서류</span>
+          <span class="n"><span id="upcount">0</span> / 2 첨부</span>
+        </div>
+
         <p class="section-label">첨부 서류 (2개만 올리면 됩니다)</p>
 
         <label class="up">
@@ -82,29 +97,13 @@
           <input type="file" name="biz_reg" required />
         </label>
 
-        <hr class="divider" />
-        <p class="section-label">자동으로 준비되는 서류</p>
-
-        <div class="auto">
-          <span class="left">
-            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-            <span class="t">캐치테이블 이용계약서</span>
-          </span>
-          <span class="badge gray">관리자 확인</span>
-        </div>
-        <div class="auto">
-          <span class="left">
-            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-            <span class="t">사용 승낙서</span>
-          </span>
-          <span class="badge green">자동 생성</span>
-        </div>
-        <div class="auto">
-          <span class="left">
-            <span class="aic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-            <span class="t">재직 증명서</span>
-          </span>
-          <span class="badge green">자동 생성</span>
+        <div class="autobox">
+          <p class="cap">나머지 3개는 자동으로 준비돼요 — 올리실 필요 없습니다</p>
+          <div class="chips">
+            <span class="chip"><span class="ok">✓</span> 사용 승낙서 <span style="color:var(--muted);">자동 생성</span></span>
+            <span class="chip"><span class="ok">✓</span> 재직 증명서 <span style="color:var(--muted);">자동 생성</span></span>
+            <span class="chip">캐치테이블 이용계약서 <span style="color:var(--muted);">담당자 확인</span></span>
+          </div>
         </div>
 
         <button class="btn btn-primary btn-block" type="submit" style="margin-top:22px;">제출하기</button>
@@ -113,8 +112,15 @@
   </div>
 
   <script>
-    // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 스타일
-    document.querySelectorAll('.up input[type=file]').forEach(function (input) {
+    // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 + 첨부 카운트 갱신
+    var upInputs = document.querySelectorAll('.up input[type=file]');
+    function refreshCount() {
+      var n = 0;
+      upInputs.forEach(function (i) { if (i.files && i.files.length) n += 1; });
+      var el = document.getElementById('upcount');
+      if (el) el.textContent = n;
+    }
+    upInputs.forEach(function (input) {
       input.addEventListener('change', function () {
         var tile = input.closest('.up');
         var fname = tile.querySelector('.fname');
@@ -128,6 +134,7 @@
           fname.textContent = '';
           if (pill) pill.textContent = '파일 선택';
         }
+        refreshCount();
       });
     });
   </script>

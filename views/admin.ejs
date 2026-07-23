@@ -11,7 +11,21 @@
       <span class="sub">발신번호 등록 · 관리자</span>
     </div>
 
-    <div class="card" style="margin-bottom:18px;">
+    <%
+      const types = Object.values(docTypes);
+      const hasDoc = (store, t) => store.documents.some(d => d.doc_type === t);
+      const docOf = (store, t) => store.documents.find(d => d.doc_type === t);
+      const readyCount = (store) => types.filter(t => hasDoc(store, t)).length;
+      const isReady = (store) => readyCount(store) === types.length;
+      const m = { total: stores.length, wait: 0, review: 0, done: 0 };
+      stores.forEach(s => {
+        if (s.nhn_status === 'registered') m.done += 1;
+        else if (s.nhn_status === 'requested') m.review += 1;
+        else if (!isReady(s)) m.wait += 1;
+      });
+    %>
+
+    <div class="card" style="margin-bottom:16px;">
       <p class="eyebrow">업로드 링크 발급</p>
       <h1 class="title" style="font-size:19px;">매장별 진행 현황</h1>
       <p class="lead">캐치테이블 어드민 기준 매장명을 입력해 만료되는 업로드 링크를 발급하세요.</p>
@@ -29,88 +43,85 @@
         <form method="POST" action="/admin/nhn-sync" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='조회 중…';">
           <button class="btn btn-ghost btn-sm" type="submit">↻ NHN 심사 상태 새로고침</button>
         </form>
-        <span class="hint" style="margin:0;">심사 상태는 주기적으로 자동 갱신됩니다.</span>
+        <span class="hint" style="margin:0;">심사 상태는 30분마다 자동 갱신됩니다.</span>
       </div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric"><div class="k">전체 매장</div><div class="v"><%= m.total %></div></div>
+      <div class="metric"><div class="k">서류 대기</div><div class="v warn"><%= m.wait %></div></div>
+      <div class="metric"><div class="k">심사중</div><div class="v acc"><%= m.review %></div></div>
+      <div class="metric"><div class="k">등록완료</div><div class="v ok"><%= m.done %></div></div>
     </div>
 
     <% if (stores.length === 0) { %>
       <div class="table-card"><div class="empty">아직 제출된 매장이 없어요.</div></div>
     <% } else { %>
     <div class="table-card">
-      <table>
-        <thead>
-          <tr>
-            <th>매장명</th>
-            <th>대표자</th>
-            <th>상태</th>
-            <th>제출일</th>
-            <th>서류</th>
-            <th>NHN 심사</th>
-            <th>링크</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% stores.forEach(store => {
-               const allReady = Object.values(docTypes).every(t => store.documents.some(d => d.doc_type === t));
-          %>
-            <tr>
-              <td><span class="name-strong"><%= store.name %></span></td>
-              <td><%= store.owner_name || '-' %></td>
-              <td><span class="status <%= store.status %>"><%= store.status === 'submitted' ? '제출완료' : '대기중' %></span></td>
-              <td style="color:var(--muted);"><%= store.submitted_at || '-' %></td>
-              <td>
-                <div class="doclist">
-                  <% Object.values(docTypes).forEach(type => {
-                       const doc = store.documents.find(d => d.doc_type === type);
-                       const isContract = (type === docTypes.CONTRACT);
-                  %>
-                    <% if (doc) { %>
-                      <a href="/admin/download/<%= store.id %>/<%= doc.id %>"><%= type %> ↓</a>
-                      <% if (isContract) { %>
-                        <a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">↻ 다시 선택</a>
-                      <% } %>
-                    <% } else if (isContract) { %>
-                      <a class="link-strong" href="/admin/contract-candidates/<%= store.id %>"><%= type %> — 후보 선택 →</a>
-                    <% } else { %>
-                      <span class="missing"><%= type %> (대기)</span>
-                    <% } %>
-                  <% }) %>
-                </div>
-              </td>
-              <td>
-                <% if (store.nhn_status === 'registered') { %>
-                  <span class="badge green">등록완료</span>
-                <% } else if (store.nhn_status === 'rejected') { %>
-                  <span class="badge red">반려</span>
-                  <% if (store.nhn_reject_reason) { %>
-                    <span class="reject-reason">사유: <%= store.nhn_reject_reason %></span>
-                  <% } %>
-                  <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');" style="margin-top:6px;">
-                    <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
-                  </form>
-                <% } else if (store.nhn_status === 'requested') { %>
-                  <span class="badge warn">심사중</span>
-                <% } else if (allReady) { %>
-                  <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 검토하셨나요? NHN에 발신번호 등록을 신청합니다.');">
-                    <button type="submit" class="btn btn-primary btn-sm">NHN 등록 신청</button>
-                  </form>
+      <% stores.forEach(store => {
+           const ready = isReady(store);
+           const count = readyCount(store);
+      %>
+        <div class="srow">
+          <div class="info">
+            <div class="nm"><%= store.name %></div>
+            <div class="sub"><%= store.owner_name || '대표자 미입력' %><% if (store.phone_numbers) { %> · <%= store.phone_numbers %><% } %></div>
+            <div class="dots" style="margin-top:9px;" title="서류 <%= count %>/<%= types.length %>">
+              <% types.forEach(t => { %><span class="dot <%= hasDoc(store, t) ? 'on' : 'off' %>"></span><% }) %>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px;"><%= count %>/<%= types.length %></span>
+            </div>
+          </div>
+
+          <div class="docs-mini">
+            <% types.forEach(t => {
+                 const doc = docOf(store, t);
+                 const isContract = (t === docTypes.CONTRACT);
+            %>
+              <div class="docrow">
+                <% if (doc) { %>
+                  <span class="dname"><%= t %></span>
+                  <span class="acts">
+                    <a class="prev" href="/admin/view/<%= store.id %>/<%= doc.id %>" target="_blank" rel="noopener">미리보기</a>
+                    <a href="/admin/download/<%= store.id %>/<%= doc.id %>">다운로드</a>
+                    <% if (isContract) { %><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">다시 선택</a><% } %>
+                  </span>
+                <% } else if (isContract) { %>
+                  <span class="missing"><%= t %></span>
+                  <span class="acts"><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">후보 선택 / 직접 첨부 →</a></span>
                 <% } else { %>
-                  <span class="badge gray">서류 대기중</span>
+                  <span class="missing"><%= t %></span>
+                  <span class="acts"><span class="missing">매장 업로드 대기</span></span>
                 <% } %>
-                <% if (store.nhn_checked_at) { %>
-                  <span class="checked-at">조회: <%= store.nhn_checked_at %></span>
-                <% } %>
-              </td>
-              <td>
-                <form method="POST" action="/admin/create-link">
-                  <input type="hidden" name="storeId" value="<%= store.id %>" />
-                  <button type="submit" class="btn btn-ghost btn-sm">새 링크</button>
-                </form>
-              </td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
+              </div>
+            <% }) %>
+          </div>
+
+          <div class="actions-col">
+            <% if (store.nhn_status === 'registered') { %>
+              <span class="badge green">등록완료</span>
+            <% } else if (store.nhn_status === 'rejected') { %>
+              <span class="badge red">반려</span>
+              <% if (store.nhn_reject_reason) { %><span class="reject-reason">사유: <%= store.nhn_reject_reason %></span><% } %>
+              <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
+                <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
+              </form>
+            <% } else if (store.nhn_status === 'requested') { %>
+              <span class="badge warn">심사중</span>
+            <% } else if (ready) { %>
+              <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 검토하셨나요? NHN에 발신번호 등록을 신청합니다.');">
+                <button type="submit" class="btn btn-primary btn-sm">NHN 등록 신청</button>
+              </form>
+            <% } else { %>
+              <span class="badge gray">서류 대기중</span>
+            <% } %>
+            <% if (store.nhn_checked_at) { %><span class="checked-at">조회: <%= store.nhn_checked_at %></span><% } %>
+            <form method="POST" action="/admin/create-link">
+              <input type="hidden" name="storeId" value="<%= store.id %>" />
+              <button type="submit" class="btn btn-ghost btn-sm">새 링크</button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
     </div>
     <% } %>
   </div>

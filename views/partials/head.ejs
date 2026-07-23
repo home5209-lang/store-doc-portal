@@ -127,9 +127,59 @@
   .inline-form{display:flex;gap:8px;}
   .inline-form .input{flex:1;}
 
+  /* ── 스텝퍼 (업로드 폼 상단) ── */
+  .steps{display:flex;align-items:center;gap:6px;margin:2px 0 14px;}
+  .steps .bar{flex:1;height:6px;border-radius:99px;background:var(--border);}
+  .steps .bar.on{background:var(--success);}
+  .steplabels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:18px;}
+  .steplabels .done{color:var(--success);}
+  .steplabels .cur{color:var(--text);font-weight:700;}
+
+  /* 준비 현황 카운트 콜아웃 */
+  .count-callout{display:flex;align-items:center;justify-content:space-between;background:var(--brand-soft);border-radius:10px;padding:11px 14px;margin-bottom:16px;}
+  .count-callout .l{font-size:13px;color:var(--brand-strong);}
+  .count-callout .n{font-size:15px;font-weight:800;color:var(--brand-strong);}
+
+  /* 자동 준비 서류 칩 콜아웃 */
+  .autobox{border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-top:14px;background:#FCFBFA;}
+  .autobox .cap{font-size:12px;color:var(--muted);margin:0 0 9px;font-weight:600;}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;}
+  .chip{font-size:12px;color:#5F5E5A;background:#fff;border:1px solid var(--border);border-radius:999px;padding:5px 11px;display:inline-flex;align-items:center;gap:5px;}
+  .chip .ok{color:var(--success);font-weight:800;}
+
+  /* ── 관리자 대시보드 ── */
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0;}
+  .metric{background:#fff;border:1px solid var(--border);border-radius:12px;padding:13px 14px;}
+  .metric .k{font-size:12px;color:var(--muted);}
+  .metric .v{font-size:24px;font-weight:800;letter-spacing:-.5px;margin-top:3px;}
+  .metric .v.warn{color:var(--warn);} .metric .v.acc{color:#1a56db;} .metric .v.ok{color:var(--success);}
+
+  .srow{display:flex;align-items:center;gap:16px;padding:15px 18px;border-bottom:1px solid var(--border);}
+  .srow:last-child{border-bottom:none;}
+  .srow .info{flex:1 1 30%;min-width:0;}
+  .srow .info .nm{font-size:14.5px;font-weight:700;}
+  .srow .info .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .dots{display:flex;gap:5px;align-items:center;flex:0 0 auto;}
+  .dot{width:15px;height:15px;border-radius:50%;display:inline-flex;}
+  .dot.on{background:var(--success);}
+  .dot.off{background:#E6E2DC;border:1px solid #DAD5CE;}
+  .docs-mini{flex:1 1 34%;min-width:0;display:flex;flex-direction:column;gap:5px;}
+  .docrow{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+  .docrow .dname{color:#4A4844;}
+  .docrow .missing{color:#B5B2AB;}
+  .docrow .acts{margin-left:auto;display:flex;gap:8px;white-space:nowrap;}
+  .docrow a{font-size:12px;}
+  .docrow .prev{color:var(--brand-strong);font-weight:600;}
+  .actions-col{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
+
   @media(max-width:660px){
     th:nth-child(2),td:nth-child(2){display:none;}
     .wrap-wide{padding:18px 13px 50px;}
     .cand{flex-direction:column;align-items:stretch;}
+    .metrics{grid-template-columns:repeat(2,1fr);}
+    .srow{flex-wrap:wrap;gap:10px;}
+    .srow .info{flex:1 1 100%;}
+    .docs-mini{flex:1 1 100%;}
+    .actions-col{flex-direction:row;flex-wrap:wrap;align-items:flex-start;}
   }
 </style>
