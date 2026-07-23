@@ -5,3 +5,5 @@ uploads/*
 !uploads/.gitkeep
 generated/*
 !generated/.gitkeep
+nhn/nhn-session.json
+nhn/shots/

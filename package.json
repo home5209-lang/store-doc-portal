@@ -13,6 +13,7 @@
     "express": "^4.21.1",
     "multer": "^2.0.0",
     "nanoid": "^3.3.7",
-    "pdfkit": "^0.19.1"
+    "pdfkit": "^0.19.1",
+    "playwright": "^1.47.0"
   }
 }
