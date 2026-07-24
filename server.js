@@ -357,6 +357,43 @@ app.post('/admin/attach-contract-file/:storeId', contractUpload.single('contract
   }
 });
 
+// 개별 서류 교체("다시 선택") — 해당 서류 종류를 운영자가 올린 파일로 대체한다.
+const anyDocUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const dir = path.join(GENERATED_ROOT, req.params.storeId);
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.pdf';
+      cb(null, `replace_${Date.now()}${ext}`);
+    }
+  })
+});
+app.post('/admin/replace-doc/:storeId', anyDocUpload.single('doc_file'), (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
+  const docType = req.body.doc_type;
+  if (!Object.values(DOC_TYPES).includes(docType)) return res.status(400).send('알 수 없는 서류 종류입니다.');
+  if (!req.file) return res.status(400).send('교체할 파일을 선택해주세요.');
+  try {
+    removeDocumentsOfType(store.id, docType);
+    const ext = path.extname(req.file.originalname) || '.pdf';
+    addDocument({
+      store_id: store.id,
+      doc_type: docType,
+      original_name: docFileName(store, docType, ext),
+      file_path: req.file.path,
+      source: 'manual:replace'
+    });
+    addAudit({ user: req.user, action: '서류 교체', store, detail: docType });
+    res.redirect('/admin');
+  } catch (err) {
+    res.status(500).send('서류 교체 실패: ' + err.message);
+  }
+});
+
 // 운영자 검토 후 NHN 발신번호 등록 신청 — Playwright 봇(nhn/nhnBot.js)이 콘솔을 자동 조작.
 //  · 기본: 드라이런(제출 직전까지만) — 안전
 //  · 환경변수 NHN_SUBMIT=1 일 때만 실제 "발신번호 등록 심사 요청" 제출
