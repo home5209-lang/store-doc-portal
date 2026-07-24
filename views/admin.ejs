@@ -88,15 +88,15 @@
 
           <div class="actions-col">
             <% if (store.nhn_status === 'registered') { %>
-              <span class="badge green">등록완료</span>
+              <span class="nhn-stat done"><span class="dot"></span>등록완료</span>
             <% } else if (store.nhn_status === 'rejected') { %>
-              <span class="badge red">반려</span>
+              <span class="nhn-stat rejected"><span class="dot"></span>반려</span>
               <% if (store.nhn_reject_reason) { %><span class="reject-reason">사유: <%= store.nhn_reject_reason %></span><% } %>
               <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
                 <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
               </form>
             <% } else if (store.nhn_status === 'requested') { %>
-              <span class="badge warn">심사중</span>
+              <span class="nhn-stat review"><span class="dot"></span>심사중</span>
             <% } else if (ready) { %>
               <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 검토하셨나요? NHN에 발신번호 등록을 신청합니다.');">
                 <button type="submit" class="btn btn-primary btn-sm">NHN 등록 신청</button>

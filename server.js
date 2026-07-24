@@ -36,6 +36,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const GENERATED_ROOT = path.join(__dirname, 'generated');
 
+// 서류 표시 이름을 "{매장명} {서류종류}" 로 통일한다 (다운로드/미리보기/NHN 업로드 파일명이 명확해짐).
+const DOC_LABEL = {
+  [DOC_TYPES.TELECOM_PROOF]: '통신서비스 이용증명원',
+  [DOC_TYPES.BIZ_REG]: '사업자등록증',
+  [DOC_TYPES.CONTRACT]: '이용계약서',
+  [DOC_TYPES.CONSENT]: '이용승낙서',
+  [DOC_TYPES.EMPLOYMENT_CERT]: '재직증명서'
+};
+function cleanName(s) {
+  // 파일명에 못 쓰는 문자 제거 + 공백/밑줄 정리 (한글은 유지)
+  return String(s || '')
+    .replace(/[\\/:*?"<>|\r\n\t]/g, ' ')
+    .replace(/_+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+}
+function docFileName(store, docType, ext) {
+  const label = DOC_LABEL[docType] || '서류';
+  const storeName = cleanName((store && store.name) || '매장') || '매장';
+  const e = ext && ext.startsWith('.') ? ext : `.${ext || 'pdf'}`;
+  return `${storeName} ${label}${e}`;
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -111,14 +135,14 @@ app.post(
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.TELECOM_PROOF,
-      original_name: req.files.telecom_proof[0].originalname,
+      original_name: docFileName(store, DOC_TYPES.TELECOM_PROOF, path.extname(req.files.telecom_proof[0].originalname)),
       file_path: req.files.telecom_proof[0].path,
       source: 'upload'
     });
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.BIZ_REG,
-      original_name: req.files.biz_reg[0].originalname,
+      original_name: docFileName(store, DOC_TYPES.BIZ_REG, path.extname(req.files.biz_reg[0].originalname)),
       file_path: req.files.biz_reg[0].path,
       source: 'upload'
     });
@@ -134,7 +158,7 @@ app.post(
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.CONSENT,
-      original_name: '사용승낙서.pdf',
+      original_name: docFileName(store, DOC_TYPES.CONSENT, '.pdf'),
       file_path: consentPath,
       source: 'auto:generated'
     });
@@ -144,7 +168,7 @@ app.post(
     addDocument({
       store_id: storeId,
       doc_type: DOC_TYPES.EMPLOYMENT_CERT,
-      original_name: '재직증명서.pdf',
+      original_name: docFileName(store, DOC_TYPES.EMPLOYMENT_CERT, '.pdf'),
       file_path: certPath,
       source: 'auto:generated'
     });
@@ -284,11 +308,10 @@ app.post('/admin/attach-contract/:storeId', async (req, res) => {
     await downloadSignedPdf(documentId, outPath);
     // 기존 계약서가 있으면 교체 (단건 유지)
     removeDocumentsOfType(store.id, DOC_TYPES.CONTRACT);
-    const safeTitle = (title || '캐치테이블_이용계약서').replace(/[^\w.\-가-힣 ]/g, '_').trim();
     addDocument({
       store_id: store.id,
       doc_type: DOC_TYPES.CONTRACT,
-      original_name: `${safeTitle || '캐치테이블_이용계약서'}.pdf`,
+      original_name: docFileName(store, DOC_TYPES.CONTRACT, '.pdf'),
       file_path: outPath,
       source: 'manual:modusign'
     });
@@ -319,15 +342,15 @@ app.post('/admin/attach-contract-file/:storeId', contractUpload.single('contract
   if (!req.file) return res.status(400).send('첨부할 계약서 파일을 선택해주세요.');
   try {
     removeDocumentsOfType(store.id, DOC_TYPES.CONTRACT); // 기존 계약서 교체 (단건 유지)
-    const safeName = (req.file.originalname || '계약서_직접첨부.pdf').replace(/[^\w.\-가-힣 ]/g, '_').trim();
+    const ext = path.extname(req.file.originalname) || '.pdf';
     addDocument({
       store_id: store.id,
       doc_type: DOC_TYPES.CONTRACT,
-      original_name: safeName || '계약서_직접첨부.pdf',
+      original_name: docFileName(store, DOC_TYPES.CONTRACT, ext),
       file_path: req.file.path,
       source: 'manual:upload'
     });
-    addAudit({ user: req.user, action: '계약서 직접 첨부', store, detail: safeName });
+    addAudit({ user: req.user, action: '계약서 직접 첨부', store, detail: req.file.originalname || '' });
     res.redirect('/admin');
   } catch (err) {
     res.status(500).send('계약서 직접 첨부 실패: ' + err.message);
@@ -365,14 +388,27 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
     return res.status(400).send('발신번호가 없습니다. 업로드 폼에서 발신번호를 입력받아야 합니다.');
   }
 
-  const realSubmit = process.env.NHN_SUBMIT === '1';
-  const headless = process.env.NHN_HEADLESS === '1';
+  // NHN에 올릴 때 쓸 "진짜 파일명" (매장명 + 서류종류). 확장자는 원본 파일 것을 따른다.
+  const nameOf = (type) => {
+    const p = pathOf(type);
+    return docFileName(store, type, p ? path.extname(p) : '.pdf');
+  };
+  const docNames = {
+    telecomProof: nameOf(DOC_TYPES.TELECOM_PROOF),
+    consent: nameOf(DOC_TYPES.CONSENT),
+    bizReg: nameOf(DOC_TYPES.BIZ_REG),
+    contract: nameOf(DOC_TYPES.CONTRACT),
+    employmentCert: nameOf(DOC_TYPES.EMPLOYMENT_CERT)
+  };
+
+  const realSubmit = String(process.env.NHN_SUBMIT || '').trim() === '1';
+  const headless = String(process.env.NHN_HEADLESS || '').trim() === '1';
   const phone = String(store.phone_numbers).split(/[,/\n]/)[0].trim(); // 첫 번호 사용
 
   try {
     // playwright 미설치 시 서버 기동엔 영향 없도록 지연 로드
     const { submitSenderNumber } = require('./nhn/nhnBot');
-    const result = await submitSenderNumber({ phone, files, dryRun: !realSubmit, headless });
+    const result = await submitSenderNumber({ phone, files, docNames, dryRun: !realSubmit, headless });
     if (realSubmit && result && result.submitted) {
       setNhnStatus(store.id, 'requested');
       addAudit({ user: req.user, action: 'NHN 등록 신청(실제 제출)', store, detail: phone });
@@ -447,12 +483,12 @@ app.post('/admin/regenerate-docs/:storeId', async (req, res) => {
     const consentPath = path.join(GENERATED_ROOT, store.id, '사용승낙서.pdf');
     await generateConsentDoc(store, consentPath);
     removeDocumentsOfType(store.id, DOC_TYPES.CONSENT);
-    addDocument({ store_id: store.id, doc_type: DOC_TYPES.CONSENT, original_name: '사용승낙서.pdf', file_path: consentPath, source: 'auto:generated' });
+    addDocument({ store_id: store.id, doc_type: DOC_TYPES.CONSENT, original_name: docFileName(store, DOC_TYPES.CONSENT, '.pdf'), file_path: consentPath, source: 'auto:generated' });
 
     const certPath = path.join(GENERATED_ROOT, store.id, '재직증명서.pdf');
     await generateEmploymentCert(store, certPath);
     removeDocumentsOfType(store.id, DOC_TYPES.EMPLOYMENT_CERT);
-    addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: '재직증명서.pdf', file_path: certPath, source: 'auto:generated' });
+    addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: docFileName(store, DOC_TYPES.EMPLOYMENT_CERT, '.pdf'), file_path: certPath, source: 'auto:generated' });
 
     console.log(`[재생성] ${store.name} 승낙서/재직증명서 다시 생성 완료`);
     addAudit({ user: req.user, action: '서류 재생성', store });
@@ -492,6 +528,11 @@ app.listen(PORT, () => {
   const sampleId = nanoid(8);
   const sampleToken = generateUploadToken(sampleId);
   console.log(`샘플 업로드 링크: http://localhost:${PORT}/upload/${sampleId}/${sampleToken}`);
+  console.log(
+    String(process.env.NHN_SUBMIT || '').trim() === '1'
+      ? '⚠️  NHN 실제 제출 모드: ON (버튼 클릭 시 실제 심사 요청까지 제출됩니다)'
+      : 'NHN 실제 제출 모드: OFF (드라이런 — 제출 직전까지만). 실제 제출하려면 NHN_SUBMIT=1로 시작하세요.'
+  );
 
   // NHN 심사 결과 자동 주기 동기화.
   //  · NHN_SYNC=0 이면 끔 / NHN_SYNC_INTERVAL_MIN 으로 주기(분) 조정 (기본 180분)
