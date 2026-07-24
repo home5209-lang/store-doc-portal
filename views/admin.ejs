@@ -7,7 +7,7 @@
   <div class="wrap-wide">
     <div class="brand">
       <span class="dot">C</span>
-      <span class="name">캐치테이블</span>
+      <span class="name">발신 번호 등록 관리자</span>
       <span class="sub" style="display:flex;align-items:center;gap:10px;">
         발신번호 등록 · 관리자
         <button type="button" class="btn btn-ghost btn-sm" onclick="openGuide()">❔ 사용 가이드</button>
@@ -67,12 +67,32 @@
     <% if (stores.length === 0) { %>
       <div class="table-card"><div class="empty">아직 제출된 매장이 없어요.</div></div>
     <% } else { %>
-    <div class="table-card">
+    <div class="filters">
+      <input id="storeSearch" class="input" type="text" placeholder="매장명 검색" />
+      <div class="fchips">
+        <button type="button" class="fchip active" data-f="all">전체</button>
+        <button type="button" class="fchip" data-f="wait">서류 대기</button>
+        <button type="button" class="fchip" data-f="ready">신청 대기</button>
+        <button type="button" class="fchip" data-f="review">심사중</button>
+        <button type="button" class="fchip" data-f="done">등록완료</button>
+        <button type="button" class="fchip" data-f="rejected">반려</button>
+      </div>
+      <select id="storeSort" class="fsort">
+        <option value="default">등록순(최신)</option>
+        <option value="name">매장명순</option>
+        <option value="status">상태순</option>
+      </select>
+    </div>
+    <div class="table-card" id="storeList">
       <% stores.forEach(store => {
            const ready = isReady(store);
            const count = readyCount(store);
+           const st = store.nhn_status === 'registered' ? 'done'
+             : store.nhn_status === 'rejected' ? 'rejected'
+             : store.nhn_status === 'requested' ? 'review'
+             : (ready ? 'ready' : 'wait');
       %>
-        <div class="srow">
+        <div class="srow" data-status="<%= st %>" data-name="<%= (store.name || '').toLowerCase() %>">
           <div class="info">
             <div class="nm"><%= store.name %></div>
             <div class="sub"><%= store.owner_name || '대표자 미입력' %><% if (store.phone_numbers) { %> · <%= store.phone_numbers %><% } %></div>
@@ -115,6 +135,7 @@
           </div>
         </div>
       <% }) %>
+      <div class="filters-empty" id="filterEmpty">조건에 맞는 매장이 없어요.</div>
     </div>
     <% } %>
   </div>
@@ -178,6 +199,53 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open, .guide-drawer.open').forEach(function (o) { o.classList.remove('open'); });
     });
+
+    // 매장 검색 · 상태 필터 · 정렬 (클라이언트)
+    (function () {
+      var list = document.getElementById('storeList');
+      if (!list) return;
+      var search = document.getElementById('storeSearch');
+      var chips = document.querySelectorAll('.fchip');
+      var sortSel = document.getElementById('storeSort');
+      var emptyEl = document.getElementById('filterEmpty');
+      var rows = Array.prototype.slice.call(list.querySelectorAll('.srow'));
+      var origOrder = rows.slice();
+      var curFilter = 'all';
+      var statusRank = { rejected: 0, review: 1, ready: 2, wait: 3, done: 4 };
+
+      function apply() {
+        var q = (search && search.value || '').trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (r) {
+          var okF = curFilter === 'all' || r.getAttribute('data-status') === curFilter;
+          var okQ = !q || (r.getAttribute('data-name') || '').indexOf(q) >= 0;
+          var show = okF && okQ;
+          r.style.display = show ? '' : 'none';
+          if (show) shown += 1;
+        });
+        if (emptyEl) emptyEl.style.display = shown === 0 ? 'block' : 'none';
+      }
+      function sortRows() {
+        var mode = sortSel ? sortSel.value : 'default';
+        var arr = origOrder.slice();
+        if (mode === 'name') {
+          arr.sort(function (a, b) { return (a.getAttribute('data-name') || '').localeCompare(b.getAttribute('data-name') || '', 'ko'); });
+        } else if (mode === 'status') {
+          arr.sort(function (a, b) { return (statusRank[a.getAttribute('data-status')] || 9) - (statusRank[b.getAttribute('data-status')] || 9); });
+        }
+        arr.forEach(function (r) { list.appendChild(r); });
+      }
+      if (search) search.addEventListener('input', apply);
+      chips.forEach(function (c) {
+        c.addEventListener('click', function () {
+          chips.forEach(function (x) { x.classList.remove('active'); });
+          c.classList.add('active');
+          curFilter = c.getAttribute('data-f');
+          apply();
+        });
+      });
+      if (sortSel) sortSel.addEventListener('change', function () { sortRows(); apply(); });
+    })();
   </script>
 </body>
 </html>
