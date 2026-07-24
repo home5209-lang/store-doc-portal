@@ -26,6 +26,7 @@ const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator')
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
+const { notifySlack } = require('./notify');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -479,10 +480,19 @@ async function runNhnSync(log = console.log) {
     for (const r of rows) {
       const store = findStoreByPhone(r.phone);
       if (!store) continue;
-      if (store.nhn_status !== r.status || (r.reason && store.nhn_reject_reason !== r.reason)) {
+      const statusChanged = store.nhn_status !== r.status;
+      if (statusChanged || (r.reason && store.nhn_reject_reason !== r.reason)) {
         setNhnResult(store.id, r.status, r.reason);
         updated += 1;
         log(`[nhn-sync] ${store.name} (${r.phone}) → ${r.status}${r.reason ? ' / ' + r.reason : ''}`);
+        // 등록완료/반려로 "바뀐" 순간에만 슬랙 알림 (심사중 갱신 등은 알리지 않음)
+        if (statusChanged && (r.status === 'registered' || r.status === 'rejected')) {
+          const msg =
+            r.status === 'registered'
+              ? `✅ [발신번호 등록완료] ${store.name} · ${r.phone}`
+              : `🔴 [발신번호 반려] ${store.name} · ${r.phone}${r.reason ? `\n사유: ${r.reason}` : ''}`;
+          notifySlack(msg, log).catch(() => {});
+        }
       }
     }
     log(`[nhn-sync] 완료: ${rows.length}건 조회, ${updated}건 갱신`);
