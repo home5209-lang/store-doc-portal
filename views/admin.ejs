@@ -138,7 +138,7 @@
           %>
             <div class="docrow">
               <% if (doc) { %>
-                <span class="dname"><%= t %></span>
+                <span class="dname"><span class="doc-check" aria-label="첨부됨">✓</span><%= t %></span>
                 <span class="acts">
                   <a class="prev" href="/admin/view/<%= store.id %>/<%= doc.id %>" target="_blank" rel="noopener">미리보기</a>
                   <% if (isContract) { %>
