@@ -53,13 +53,9 @@
         </div>
 
         <div class="field">
-          <label>발신번호 담당자 이름 <span class="req">*</span></label>
-          <input class="input" type="text" name="contact_name" value="<%= store.contact_name || '' %>" required />
-        </div>
-
-        <div class="field">
-          <label>담당자 직위 <span class="req">*</span></label>
-          <input class="input" type="text" name="contact_title" value="<%= store.contact_title || '' %>" placeholder="예: 점장" required />
+          <label>대표자 직위 <span class="req">*</span></label>
+          <input class="input" type="text" name="contact_title" value="<%= store.contact_title || '' %>" placeholder="예: 대표" required />
+          <div class="hint">재직증명서에 대표자 직위로 기재됩니다. (모든 서류의 인적사항은 사업자등록증과 동일해야 합니다.)</div>
         </div>
 
         <hr class="divider" />
