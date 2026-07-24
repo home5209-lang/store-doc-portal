@@ -168,12 +168,17 @@
   .docrow .dname{color:#4A4844;}
   .docrow .missing{color:#B5B2AB;}
   .docrow .acts{margin-left:auto;display:flex;gap:6px;white-space:nowrap;align-items:center;}
-  .docrow .acts a{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#5F5E5A;border:1px solid var(--border);border-radius:8px;padding:3px 9px;text-decoration:none;transition:border-color .12s,background .12s,color .12s;}
+  .docrow .acts a,
+  .docrow .acts label{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#5F5E5A;border:1px solid var(--border);border-radius:8px;padding:3px 9px;text-decoration:none;cursor:pointer;transition:border-color .12s,background .12s,color .12s;}
   .docrow .acts a svg{width:13px;height:13px;}
-  .docrow .acts a:hover{border-color:var(--brand);color:var(--brand-strong);background:var(--brand-soft);text-decoration:none;}
+  .docrow .acts a:hover,
+  .docrow .acts label:hover{border-color:var(--brand);color:var(--brand-strong);background:var(--brand-soft);text-decoration:none;}
   .docrow .acts a.prev{color:var(--brand-strong);border-color:#F3CDB6;}
-  .docrow .acts a.link-strong{color:var(--brand-strong);border-color:#F3CDB6;}
+  .docrow .acts a.link-strong,
+  .docrow .acts label.link-strong{color:var(--brand-strong);border-color:#F3CDB6;}
   .docrow .acts .missing{font-size:11.5px;color:#B5B2AB;}
+  .docrow .dname{display:inline-flex;align-items:center;gap:6px;}
+  .doc-check{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--success-bg);color:var(--success);font-size:11px;font-weight:800;flex:0 0 auto;}
   .actions-col{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
 
   /* NHN 심사 상태 — 또렷한 큰 배지 */
