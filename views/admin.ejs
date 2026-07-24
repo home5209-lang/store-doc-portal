@@ -141,8 +141,15 @@
                 <span class="dname"><%= t %></span>
                 <span class="acts">
                   <a class="prev" href="/admin/view/<%= store.id %>/<%= doc.id %>" target="_blank" rel="noopener">미리보기</a>
+                  <% if (isContract) { %>
+                    <a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">다시 선택</a>
+                  <% } else { %>
+                    <form method="POST" action="/admin/replace-doc/<%= store.id %>" enctype="multipart/form-data" style="display:inline;margin:0;">
+                      <input type="hidden" name="doc_type" value="<%= t %>" />
+                      <label class="link-strong" style="cursor:pointer;">다시 선택<input type="file" name="doc_file" style="display:none;" onchange="this.form.submit()" /></label>
+                    </form>
+                  <% } %>
                   <a href="/admin/download/<%= store.id %>/<%= doc.id %>" title="다운로드" aria-label="다운로드"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
-                  <% if (isContract) { %><a class="link-strong" href="/admin/contract-candidates/<%= store.id %>">다시 선택</a><% } %>
                 </span>
               <% } else if (isContract) { %>
                 <span class="missing"><%= t %></span>
@@ -153,12 +160,6 @@
               <% } %>
             </div>
           <% }) %>
-          <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span class="hint" style="margin:0;">승낙서·재직증명서를 최신 양식으로 다시 만듭니다.</span>
-            <form method="POST" action="/admin/regenerate-docs/<%= store.id %>">
-              <button type="submit" class="btn btn-ghost btn-sm">서류 재생성</button>
-            </form>
-          </div>
         </div>
       </div>
     </div>
