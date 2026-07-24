@@ -198,6 +198,11 @@ app.get('/auth/logout', (req, res) => {
 // 관리자용: 로그인 세션 필요 (미로그인 시 로그인 페이지로)
 // -------------------------------------------------------------------------
 function requireLogin(req, res, next) {
+  // 구글 SSO가 아직 설정되지 않았으면 로그인 없이 접근 허용(설정 전 잠김 방지 — 로컬/과도기용)
+  if (!googleAuth.isConfigured()) {
+    req.user = googleAuth.getSession(req) || { email: null, name: '(로그인 없음)' };
+    return next();
+  }
   const user = googleAuth.getSession(req);
   if (user) {
     req.user = user;

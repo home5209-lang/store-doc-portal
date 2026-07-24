@@ -392,35 +392,94 @@ async function searchCompletedDocumentsByTitle(titleQuery, options = {}) {
   return all;
 }
 
+/** 검색용 토큰: 정규화 → 공백 분리 → 공백제거 → 빈값 제거 */
+function searchTokens(name) {
+  return normalizeStoreName(name)
+    .split(' ')
+    .map((t) => t.replace(/\s+/g, ''))
+    .filter(Boolean);
+}
+
+/** 문서의 "검색 대상 텍스트"(제목 + 서명자)를 정규화·공백제거해 하나로 만든다. */
+function docHaystack(doc) {
+  const raw = `${getDocTitle(doc)} ${getParticipantNames(doc).join(' ')}`;
+  return normalizeStoreName(raw).replace(/\s+/g, '');
+}
+
+/** 완료 문서를 최근순으로 병렬 조회한다. (전체가 수만 건일 수 있어 상한 페이지까지만) */
+async function scanRecentCompleted(options = {}) {
+  const opts = { ...DEFAULT_OPTIONS, ...options };
+  const pageSize = opts.pageSize || 100;
+  const maxPages = opts.candidateScanPages || 20;
+  const filter = encodeURIComponent("status eq 'COMPLETED'");
+
+  const first = await modusignGet(`/documents?offset=0&limit=${pageSize}&filter=${filter}`);
+  const all = extractDocumentArray(first);
+  const count = Number(first && first.count) || all.length;
+  const pages = Math.min(Math.ceil(count / pageSize), maxPages);
+
+  const offsets = [];
+  for (let i = 1; i < pages; i += 1) offsets.push(i * pageSize);
+  const settled = await Promise.allSettled(
+    offsets.map((off) => modusignGet(`/documents?offset=${off}&limit=${pageSize}&filter=${filter}`))
+  );
+  settled.forEach((s) => {
+    if (s.status === 'fulfilled') all.push(...extractDocumentArray(s.value));
+  });
+  return all;
+}
+
 /**
- * 매장명(검색어)에 매칭되는 서명 완료 계약서 "후보"를 모두 돌려준다.
- * 모두싸인 제목 검색으로 후보를 서버에서 가져온 뒤, 표시/정렬용 유사도 점수를 붙인다.
- * (자동 선택 대신 운영자가 관리자 화면에서 직접 고를 수 있도록 목록을 제공)
+ * 매장명(검색어)에 매칭되는 서명 완료 계약서 "후보"를 돌려준다.
+ * 모두싸인 UI처럼 제목뿐 아니라 "서명자"까지 검색 대상에 포함한다.
+ *   (1) 서버 제목 검색: 제목에 매장명이 들어간 문서(전체 대상, 빠름)
+ *   (2) 최근 완료문서 병렬 스캔: 서명자에 매장명이 들어간 문서(제목은 일반명인 경우)
+ * 두 결과를 합쳐, "검색 토큰이 (제목+서명자)에 모두 포함"되는 문서만 후보로 남긴다.
  * @returns {Array<{ documentId, title, signers, createdAt, matchedField, matchedValue, score }>}
  */
 async function findContractCandidates(storeName, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
+  const tokens = searchTokens(storeName);
+  const byId = new Map();
 
-  const documents = await searchCompletedDocumentsByTitle(storeName, opts);
+  const consider = (doc) => {
+    const id = getDocId(doc);
+    if (!id) return;
+    const hay = docHaystack(doc);
+    // 모두싸인 UI와 동일하게: 검색 토큰이 제목+서명자 어딘가에 "모두" 들어있어야 후보
+    if (!tokens.length || !tokens.every((t) => hay.includes(t))) return;
+    const best = scoreDocumentAgainstStore(storeName, doc, opts);
+    const cand = {
+      documentId: id,
+      title: getDocTitle(doc),
+      signers: getParticipantNames(doc),
+      createdAt: doc.createdAt || doc.created_at || null,
+      matchedField: best.field || 'title',
+      matchedValue: best.value,
+      score: best.score,
+    };
+    const prev = byId.get(id);
+    if (!prev || cand.score > prev.score) byId.set(id, cand);
+  };
 
-  return documents
-    .map((doc) => {
-      const best = scoreDocumentAgainstStore(storeName, doc, opts);
-      return {
-        documentId: getDocId(doc),
-        title: getDocTitle(doc),
-        signers: getParticipantNames(doc),
-        createdAt: doc.createdAt || doc.created_at || null,
-        matchedField: best.field || 'title',
-        matchedValue: best.value,
-        score: best.score,
-      };
-    })
-    .filter((r) => r.documentId)
-    .sort(
-      (a, b) =>
-        b.score - a.score || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
-    );
+  // (1) 서버 제목 검색 — 가장 긴(구별력 높은) 토큰으로 contains(title, ...) (전체 문서 대상)
+  const longest = tokens.slice().sort((a, b) => b.length - a.length)[0] || storeName;
+  try {
+    (await searchCompletedDocumentsByTitle(longest, opts)).forEach(consider);
+  } catch (e) {
+    /* 무시하고 (2)로 */
+  }
+  // (2) 최근 완료문서 병렬 스캔 — 서명자 매칭 포함
+  try {
+    (await scanRecentCompleted(opts)).forEach(consider);
+  } catch (e) {
+    /* 무시 */
+  }
+
+  return [...byId.values()].sort(
+    (a, b) =>
+      b.score - a.score || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+  );
 }
 
 /** 서명 완료 문서의 PDF를 내려받아 outPath에 저장한다. */
