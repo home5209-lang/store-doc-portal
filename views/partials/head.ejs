@@ -176,6 +176,17 @@
   .docrow .acts .missing{font-size:11.5px;color:#B5B2AB;}
   .actions-col{flex:0 0 auto;display:flex;flex-direction:column;gap:7px;align-items:flex-end;}
 
+  /* NHN 심사 상태 — 또렷한 큰 배지 */
+  .nhn-stat{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:800;letter-spacing:-.2px;padding:7px 14px;border-radius:999px;border:1.5px solid transparent;white-space:nowrap;}
+  .nhn-stat .dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}
+  .nhn-stat.review{background:var(--warn-bg);color:#7A5A12;border-color:#E7D6A6;}
+  .nhn-stat.review .dot{background:var(--warn);animation:nhnpulse 1.1s ease-in-out infinite;}
+  .nhn-stat.done{background:var(--success-bg);color:#12543A;border-color:#BFE3CF;}
+  .nhn-stat.done .dot{background:var(--success);}
+  .nhn-stat.rejected{background:var(--brand-soft);color:#A3231C;border-color:#F3C2BE;}
+  .nhn-stat.rejected .dot{background:#D42A20;}
+  @keyframes nhnpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+
   /* 서류 보기 팝업(모달) */
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(24,20,18,.45);z-index:50;padding:40px 16px;overflow:auto;}
   .modal-overlay.open{display:flex;align-items:flex-start;justify-content:center;}
