@@ -115,9 +115,10 @@ async function generateEmploymentCert(store, outPath) {
     doc.font('krb').fontSize(22).text('재 직 증 명 서', { align: 'center' });
     doc.moveDown(2);
 
+    // 재직증명서 인적사항은 사업자등록증과 동일해야 하므로 '대표자' 기준으로 기재한다.
     const rows = [
-      ['성명', store.contact_name || ''],
-      ['직위', store.contact_title || ''],
+      ['성명', store.owner_name || ''],
+      ['직위', store.contact_title || '대표'],
       ['소속(상호명)', store.name || ''],
       ['사업자등록번호', store.biz_reg_no || '']
     ];
