@@ -27,6 +27,7 @@ const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
 const { notifySlack } = require('./notify');
+const { withNhnLock } = require('./nhn/session');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -446,7 +447,10 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
   try {
     // playwright 미설치 시 서버 기동엔 영향 없도록 지연 로드
     const { submitSenderNumber } = require('./nhn/nhnBot');
-    const result = await submitSenderNumber({ phone, files, docNames, dryRun: !realSubmit, headless });
+    // 제출과 주기조회가 동시에 프로필(브라우저)을 열지 않도록 직렬화
+    const result = await withNhnLock(() =>
+      submitSenderNumber({ phone, files, docNames, dryRun: !realSubmit, headless })
+    );
     if (realSubmit && result && result.submitted) {
       setNhnStatus(store.id, 'requested');
       addAudit({ user: req.user, action: 'NHN 등록 신청(실제 제출)', store, detail: phone });
@@ -475,7 +479,7 @@ async function runNhnSync(log = console.log) {
   try {
     const { scrapeStatuses } = require('./nhn/syncStatus');
     const headless = process.env.NHN_HEADLESS !== '0'; // 주기 동기화는 기본 headless
-    const rows = await scrapeStatuses({ headless, log });
+    const rows = await withNhnLock(() => scrapeStatuses({ headless, log }));
     let updated = 0;
     for (const r of rows) {
       const store = findStoreByPhone(r.phone);
