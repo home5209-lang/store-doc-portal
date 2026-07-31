@@ -6,4 +6,6 @@ uploads/*
 generated/*
 !generated/.gitkeep
 nhn/nhn-session.json
+nhn/nhn-profile/
 nhn/shots/
+reset-nhn.js

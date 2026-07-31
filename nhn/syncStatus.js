@@ -8,11 +8,10 @@
 
 const path = require('path');
 const fs = require('fs');
-const { chromium } = require('playwright');
+const { launchSession, hasSession } = require('./session');
 
 const PROJECT_URL =
   'https://console.nhncloud.com/project/01WUQd24/notification/sms#preregistration-outgoing-numbers';
-const SESSION_PATH = path.join(__dirname, 'nhn-session.json');
 const SHOT_DIR = path.join(__dirname, 'shots');
 
 // 상태 텍스트 → 내부 상태코드
@@ -119,12 +118,11 @@ async function readRows(frame) {
 
 // 반환: [{ phone, status, reason, raw }]
 async function scrapeStatuses({ headless = true, log = console.log } = {}) {
-  if (!fs.existsSync(SESSION_PATH)) {
+  if (!hasSession()) {
     throw new Error('로그인 세션이 없습니다. 먼저 `node nhn/capture-session.js` 를 실행해 세션을 저장하세요.');
   }
-  const browser = await chromium.launch({ headless });
-  const context = await browser.newContext({ storageState: SESSION_PATH });
-  const page = await context.newPage();
+  const context = await launchSession({ headless });
+  const page = context.pages()[0] || (await context.newPage());
   try {
     log('· NHN 콘솔 발신번호 목록으로 이동...');
     await page.goto(PROJECT_URL, { waitUntil: 'domcontentloaded' });
@@ -157,19 +155,18 @@ async function scrapeStatuses({ headless = true, log = console.log } = {}) {
     log(`· 목록에서 ${results.length}건의 발신번호 상태를 읽었습니다.`);
     return results;
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 
 // 화면 구조 확인용: 목록 프레임의 텍스트/HTML/스크린샷을 shots/ 에 덤프
 async function probe({ headless = false, log = console.log } = {}) {
-  if (!fs.existsSync(SESSION_PATH)) {
+  if (!hasSession()) {
     throw new Error('로그인 세션이 없습니다. 먼저 `node nhn/capture-session.js` 를 실행하세요.');
   }
   const dir = shotDir();
-  const browser = await chromium.launch({ headless });
-  const context = await browser.newContext({ storageState: SESSION_PATH });
-  const page = await context.newPage();
+  const context = await launchSession({ headless });
+  const page = context.pages()[0] || (await context.newPage());
   try {
     await page.goto(PROJECT_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500); // 콘솔 iframe 로딩 대기
@@ -191,7 +188,7 @@ async function probe({ headless = false, log = console.log } = {}) {
     log('덤프 완료 → nhn/shots/list-text.txt, list-page.html, list-page.png, list-rows.json');
     log(`행 후보 ${rows.length}개.`);
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 

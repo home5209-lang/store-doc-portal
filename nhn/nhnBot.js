@@ -14,7 +14,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { chromium } = require('playwright');
+const { launchSession, hasSession } = require('./session');
 
 // NHN 업로더는 파일명이 비정상(매장이 올린 한글 깨짐 → 초장문 밑줄 이름)이면 첨부를 거부한다.
 // 그래서 업로드 전에 모든 파일을 "짧고 깨끗한 ASCII 이름"으로 준비한다(prepareUpload).
@@ -73,7 +73,6 @@ async function prepareUpload(context, filePath, key, niceName) {
 
 const PROJECT_URL =
   'https://console.nhncloud.com/project/01WUQd24/notification/sms#preregistration-outgoing-numbers';
-const SESSION_PATH = path.join(__dirname, 'nhn-session.json');
 const SHOT_DIR = path.join(__dirname, 'shots');
 
 function shotPath(name) {
@@ -134,7 +133,7 @@ async function submitSenderNumber({
     if (!files || !files[k]) throw new Error(`파일 누락: ${k}`);
     if (!fs.existsSync(files[k])) throw new Error(`파일이 존재하지 않습니다: ${files[k]}`);
   }
-  if (!fs.existsSync(SESSION_PATH)) {
+  if (!hasSession()) {
     throw new Error('로그인 세션이 없습니다. 먼저 `node nhn/capture-session.js`를 실행해 세션을 저장하세요.');
   }
 
@@ -146,9 +145,8 @@ async function submitSenderNumber({
     files.employmentCert // 기타 서류
   ];
 
-  const browser = await chromium.launch({ headless });
-  const context = await browser.newContext({ storageState: SESSION_PATH });
-  const page = await context.newPage();
+  const context = await launchSession({ headless });
+  const page = context.pages()[0] || (await context.newPage());
 
   try {
     // 0) 모든 서류를 "짧고 깨끗한 이름"으로 준비 (매장 업로드 파일명이 깨져서 NHN이 거부하는 문제 해결)
@@ -333,7 +331,7 @@ async function submitSenderNumber({
     await shot(page, 'error', log);
     throw e;
   } finally {
-    await browser.close();
+    await context.close();
   }
 }
 
