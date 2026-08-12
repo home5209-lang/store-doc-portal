@@ -22,12 +22,11 @@ const {
   listAudit,
   lastActorByStore
 } = require('./db');
-const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
 const { notifySlack } = require('./notify');
-const { withNhnLock } = require('./nhn/session');
+const { withNhnLock, hasSession } = require('./nhn/session');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -37,6 +36,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const GENERATED_ROOT = path.join(__dirname, 'generated');
+const TEMPLATES_ROOT = path.join(__dirname, 'templates');
+
+// 매장이 직접 작성해 올릴 서류의 빈 양식(다운로드용). kind → 파일명
+const FORM_TEMPLATES = {
+  consent: '전화번호이용승낙서_template.docx',
+  employment: '재직증명서_template.docx'
+};
 
 // 서류 표시 이름을 "{매장명} {서류종류}" 로 통일한다 (다운로드/미리보기/NHN 업로드 파일명이 명확해짐).
 const DOC_LABEL = {
@@ -102,14 +108,30 @@ app.get('/upload/:storeId/:token', (req, res) => {
     });
     store = getStore(storeId);
   }
-  res.render('upload', { store, docTypes: DOC_TYPES, error: null });
+  res.render('upload', { store, docTypes: DOC_TYPES, error: null, token });
+});
+
+// 빈 양식(사용승낙서/재직증명서) 다운로드 — 매장이 이 양식을 받아 작성 후 업로드한다.
+app.get('/upload/:storeId/:token/form/:kind', (req, res) => {
+  const { storeId, token, kind } = req.params;
+  const check = verifyUploadToken(storeId, token);
+  if (!check.valid) {
+    return res.status(check.reason === 'expired' ? 410 : 403).render('link-invalid', { reason: check.reason });
+  }
+  const fileName = FORM_TEMPLATES[kind];
+  if (!fileName) return res.status(404).send('양식을 찾을 수 없습니다.');
+  const filePath = path.join(TEMPLATES_ROOT, fileName);
+  if (!fs.existsSync(filePath)) return res.status(404).send('양식 파일이 없습니다.');
+  res.download(filePath, fileName);
 });
 
 app.post(
   '/upload/:storeId/:token',
   upload.fields([
     { name: 'telecom_proof', maxCount: 1 },
-    { name: 'biz_reg', maxCount: 1 }
+    { name: 'biz_reg', maxCount: 1 },
+    { name: 'consent', maxCount: 1 },
+    { name: 'employment', maxCount: 1 }
   ]),
   async (req, res) => {
     const { storeId, token } = req.params;
@@ -120,12 +142,19 @@ app.post(
 
     const { name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers } = req.body;
 
-    if (!req.files?.telecom_proof || !req.files?.biz_reg) {
+    // 매장이 직접 올려야 하는 서류 4종 (통신증명원 / 사업자등록증 / 사용승낙서 / 재직증명서)
+    const missing = [];
+    if (!req.files?.telecom_proof) missing.push('통신서비스 이용증명원');
+    if (!req.files?.biz_reg) missing.push('사업자 등록증');
+    if (!req.files?.consent) missing.push('사용 승낙서');
+    if (!req.files?.employment) missing.push('재직 증명서');
+    if (missing.length) {
       const store = getStore(storeId);
       return res.render('upload', {
         store,
         docTypes: DOC_TYPES,
-        error: '통신서비스 이용증명원과 사업자 등록증을 모두 첨부해주세요.'
+        error: `다음 서류를 첨부해주세요: ${missing.join(', ')}`,
+        token
       });
     }
 
@@ -133,47 +162,25 @@ app.post(
     upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers });
     const store = getStore(storeId);
 
-    // 2. 매장이 직접 올린 서류 2건 기록
-    addDocument({
-      store_id: storeId,
-      doc_type: DOC_TYPES.TELECOM_PROOF,
-      original_name: docFileName(store, DOC_TYPES.TELECOM_PROOF, path.extname(req.files.telecom_proof[0].originalname)),
-      file_path: req.files.telecom_proof[0].path,
-      source: 'upload'
-    });
-    addDocument({
-      store_id: storeId,
-      doc_type: DOC_TYPES.BIZ_REG,
-      original_name: docFileName(store, DOC_TYPES.BIZ_REG, path.extname(req.files.biz_reg[0].originalname)),
-      file_path: req.files.biz_reg[0].path,
-      source: 'upload'
-    });
+    // 2. 매장이 직접 올린 서류 4건 기록 (모두 매장 업로드본 — 자동 생성 없음)
+    const uploads = [
+      [DOC_TYPES.TELECOM_PROOF, req.files.telecom_proof[0]],
+      [DOC_TYPES.BIZ_REG, req.files.biz_reg[0]],
+      [DOC_TYPES.CONSENT, req.files.consent[0]],
+      [DOC_TYPES.EMPLOYMENT_CERT, req.files.employment[0]]
+    ];
+    for (const [type, file] of uploads) {
+      addDocument({
+        store_id: storeId,
+        doc_type: type,
+        original_name: docFileName(store, type, path.extname(file.originalname)),
+        file_path: file.path,
+        source: 'upload'
+      });
+    }
 
-    // 3. 계약서는 자동 첨부하지 않는다.
-    // 한 매장에 계약서가 여러 종류(광고/이용계약서/합의서 등)라 자동 선택이 불안정하므로,
-    // 운영자가 /admin 에서 모두싸인 후보 목록을 보고 직접 선택해 첨부한다.
-    // (아래 GET /admin/contract-candidates, POST /admin/attach-contract 참고)
-
-    // 4. 사용승낙서 / 재직증명서 자동 생성 (PDF — 심사 제출용)
-    const consentPath = path.join(GENERATED_ROOT, storeId, '사용승낙서.pdf');
-    await generateConsentDoc(store, consentPath);
-    addDocument({
-      store_id: storeId,
-      doc_type: DOC_TYPES.CONSENT,
-      original_name: docFileName(store, DOC_TYPES.CONSENT, '.pdf'),
-      file_path: consentPath,
-      source: 'auto:generated'
-    });
-
-    const certPath = path.join(GENERATED_ROOT, storeId, '재직증명서.pdf');
-    await generateEmploymentCert(store, certPath);
-    addDocument({
-      store_id: storeId,
-      doc_type: DOC_TYPES.EMPLOYMENT_CERT,
-      original_name: docFileName(store, DOC_TYPES.EMPLOYMENT_CERT, '.pdf'),
-      file_path: certPath,
-      source: 'auto:generated'
-    });
+    // 3. 계약서(캐치테이블 이용계약서)는 매장이 아니라 운영자가 /admin 에서 첨부한다.
+    //    (모두싸인 후보 선택 또는 직접 업로드 — GET /admin/contract-candidates 등 참고)
 
     markSubmitted(storeId);
     res.render('submitted', { store });
@@ -478,7 +485,9 @@ async function runNhnSync(log = console.log) {
   nhnSyncRunning = true;
   try {
     const { scrapeStatuses } = require('./nhn/syncStatus');
-    const headless = process.env.NHN_HEADLESS !== '0'; // 주기 동기화는 기본 headless
+    // 조회도 제출과 동일하게 기본 창 표시(headless는 NHN 콘솔 로딩이 불안정).
+    // 창을 숨기려면 NHN_HEADLESS=1 로 실행. (제출과 동시에 프로필을 열지 않도록 withNhnLock으로 직렬화)
+    const headless = String(process.env.NHN_HEADLESS || '').trim() === '1';
     const rows = await withNhnLock(() => scrapeStatuses({ headless, log }));
     let updated = 0;
     for (const r of rows) {
@@ -526,29 +535,6 @@ app.get('/admin/download/:storeId/:docId', (req, res) => {
   res.download(doc.file_path, doc.original_name);
 });
 
-// 사용승낙서·재직증명서 재생성 — 저장된 매장 정보로 다시 만든다(양식/로직 변경 후 갱신용).
-app.post('/admin/regenerate-docs/:storeId', async (req, res) => {
-  const store = getStore(req.params.storeId);
-  if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
-  try {
-    const consentPath = path.join(GENERATED_ROOT, store.id, '사용승낙서.pdf');
-    await generateConsentDoc(store, consentPath);
-    removeDocumentsOfType(store.id, DOC_TYPES.CONSENT);
-    addDocument({ store_id: store.id, doc_type: DOC_TYPES.CONSENT, original_name: docFileName(store, DOC_TYPES.CONSENT, '.pdf'), file_path: consentPath, source: 'auto:generated' });
-
-    const certPath = path.join(GENERATED_ROOT, store.id, '재직증명서.pdf');
-    await generateEmploymentCert(store, certPath);
-    removeDocumentsOfType(store.id, DOC_TYPES.EMPLOYMENT_CERT);
-    addDocument({ store_id: store.id, doc_type: DOC_TYPES.EMPLOYMENT_CERT, original_name: docFileName(store, DOC_TYPES.EMPLOYMENT_CERT, '.pdf'), file_path: certPath, source: 'auto:generated' });
-
-    console.log(`[재생성] ${store.name} 승낙서/재직증명서 다시 생성 완료`);
-    addAudit({ user: req.user, action: '서류 재생성', store });
-    res.redirect('/admin');
-  } catch (err) {
-    res.status(500).send('서류 재생성 실패: ' + err.message);
-  }
-});
-
 // 계약서 후보 미리보기 — 첨부 전에 모두싸인 완료 PDF를 내려받아 인라인으로 보여준다.
 app.get('/admin/candidate-preview/:storeId/:documentId', async (req, res) => {
   const store = getStore(req.params.storeId);
@@ -587,11 +573,12 @@ app.listen(PORT, () => {
 
   // NHN 심사 결과 자동 주기 동기화.
   //  · NHN_SYNC=0 이면 끔 / NHN_SYNC_INTERVAL_MIN 으로 주기(분) 조정 (기본 180분)
-  //  · 로그인 세션(nhn/nhn-session.json)이 있을 때만 동작
+  //  · 로그인 프로필(nhn/nhn-profile)이 있을 때만 동작
+  //  · 조회 시 브라우저 창이 잠깐 떴다 닫힘(정상). 창이 거슬리면 NHN_SYNC=0 으로 끄고 수동 새로고침만 사용.
   const syncEnabled = process.env.NHN_SYNC !== '0';
-  const sessionExists = fs.existsSync(path.join(__dirname, 'nhn', 'nhn-session.json'));
+  const sessionExists = hasSession();
   if (syncEnabled && sessionExists) {
-    const minutes = Math.max(10, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '30', 10) || 30);
+    const minutes = Math.max(10, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '180', 10) || 180);
     console.log(`NHN 심사 상태 자동 조회: ${minutes}분마다 실행`);
     const tick = () => runNhnSync().catch((e) => console.error('[nhn-sync] 오류:', e.message));
     setTimeout(tick, 15000); // 기동 15초 후 1회
