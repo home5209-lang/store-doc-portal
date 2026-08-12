@@ -94,10 +94,12 @@
         </label>
 
         <div class="tpl-guide">
-          <span class="tg-msg">아래 두 서류는 <b>제공 양식</b>을 받아 작성·날인 후 올려주세요.</span>
+          <span class="tg-msg">아래 두 서류는 <b>제공 양식</b>을 받아 작성·날인 후 올려주세요. <b>예시</b>를 참고하면 쉬워요.</span>
           <span class="tg-links">
             <a class="tpl-btn" href="/upload/<%= store.id %>/<%= token %>/form/consent">⬇ 사용 승낙서 양식</a>
+            <button type="button" class="tpl-btn ghost" data-ex="/examples/consent_example.png">🔍 승낙서 작성 예시</button>
             <a class="tpl-btn" href="/upload/<%= store.id %>/<%= token %>/form/employment">⬇ 재직 증명서 양식</a>
+            <button type="button" class="tpl-btn ghost" data-ex="/examples/employment_example.png">🔍 재직증명서 작성 예시</button>
           </span>
         </div>
 
@@ -145,9 +147,43 @@
       border-radius:10px;color:var(--brand,#FB6220);background:#fff;font-size:13px;font-weight:600;
       text-decoration:none;}
     .tpl-btn:hover{background:var(--brand,#FB6220);color:#fff;}
+    .tpl-btn.ghost{color:#8a5a2a;border-color:#e3c9b3;background:#fff;}
+    .tpl-btn.ghost:hover{background:#8a5a2a;color:#fff;border-color:#8a5a2a;}
+    .ex-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;
+      align-items:flex-start;justify-content:center;z-index:1000;overflow:auto;padding:24px;}
+    .ex-overlay.open{display:flex;}
+    .ex-box{background:#fff;border-radius:14px;padding:14px;max-width:840px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+    .ex-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+    .ex-head .t{font-weight:700;font-size:14px;color:#222;}
+    .ex-close{padding:8px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;}
+    .ex-box img{width:100%;height:auto;display:block;border:1px solid #eee;border-radius:8px;}
   </style>
 
+  <div id="exOverlay" class="ex-overlay" aria-hidden="true">
+    <div class="ex-box">
+      <div class="ex-head">
+        <span class="t">작성 예시 (실제 정보로 채워 제출하세요)</span>
+        <button type="button" id="exClose" class="ex-close">✕ 닫기</button>
+      </div>
+      <img id="exImg" src="" alt="작성 예시" />
+    </div>
+  </div>
+
   <script>
+    // 예시 보기 팝업
+    (function () {
+      var overlay = document.getElementById('exOverlay');
+      var img = document.getElementById('exImg');
+      function openEx(src) { img.src = src; overlay.classList.add('open'); }
+      function closeEx() { overlay.classList.remove('open'); img.src = ''; }
+      document.querySelectorAll('[data-ex]').forEach(function (b) {
+        b.addEventListener('click', function () { openEx(b.getAttribute('data-ex')); });
+      });
+      document.getElementById('exClose').addEventListener('click', closeEx);
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEx(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeEx(); });
+    })();
+
     // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 + 첨부 카운트 갱신
     var upInputs = document.querySelectorAll('.up input[type=file]');
     function refreshCount() {
