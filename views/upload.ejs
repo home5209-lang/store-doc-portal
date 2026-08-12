@@ -14,7 +14,7 @@
     <div class="card">
       <p class="eyebrow">서류 제출</p>
       <h1 class="title"><%= store.name === '매장명 미입력' ? '매장 정보를 입력해주세요' : store.name %></h1>
-      <p class="lead">아래 정보를 채우고 서류 2개만 올리면, 나머지 서류는 자동으로 준비됩니다.</p>
+      <p class="lead">아래 정보를 채우고 서류 4개를 올려주세요. 사용 승낙서와 재직 증명서는 제공되는 양식을 받아 작성·날인 후 올려주시면 됩니다.</p>
 
       <div class="steps" aria-hidden="true" style="margin-top:16px;">
         <span class="bar on"></span><span class="bar on"></span><span class="bar"></span>
@@ -62,10 +62,10 @@
 
         <div class="count-callout">
           <span class="l">직접 올릴 서류</span>
-          <span class="n"><span id="upcount">0</span> / 2 첨부</span>
+          <span class="n"><span id="upcount">0</span> / 4 첨부</span>
         </div>
 
-        <p class="section-label">첨부 서류 (2개만 올리면 됩니다)</p>
+        <p class="section-label">첨부 서류 (4개)</p>
 
         <label class="up">
           <span class="ic">
@@ -93,19 +93,59 @@
           <input type="file" name="biz_reg" required />
         </label>
 
+        <div class="tpl-guide">
+          <span class="tg-msg">아래 두 서류는 <b>제공 양식</b>을 받아 작성·날인 후 올려주세요.</span>
+          <span class="tg-links">
+            <a class="tpl-btn" href="/upload/<%= store.id %>/<%= token %>/form/consent">⬇ 사용 승낙서 양식</a>
+            <a class="tpl-btn" href="/upload/<%= store.id %>/<%= token %>/form/employment">⬇ 재직 증명서 양식</a>
+          </span>
+        </div>
+
+        <label class="up">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </span>
+          <span class="meta">
+            <span class="t">사용 승낙서 <span class="req">*</span></span>
+            <span class="d">위 양식을 받아 작성 후 업로드</span>
+            <span class="fname"></span>
+          </span>
+          <span class="pill">파일 선택</span>
+          <input type="file" name="consent" required />
+        </label>
+
+        <label class="up">
+          <span class="ic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </span>
+          <span class="meta">
+            <span class="t">재직 증명서 <span class="req">*</span></span>
+            <span class="d">위 양식을 받아 작성·날인(직인) 후 업로드</span>
+            <span class="fname"></span>
+          </span>
+          <span class="pill">파일 선택</span>
+          <input type="file" name="employment" required />
+        </label>
+
         <div class="autobox">
-          <p class="cap">나머지 3개는 자동으로 준비돼요 — 올리실 필요 없습니다</p>
-          <div class="chips">
-            <span class="chip"><span class="ok">✓</span> 사용 승낙서 <span style="color:var(--muted);">자동 생성</span></span>
-            <span class="chip"><span class="ok">✓</span> 재직 증명서 <span style="color:var(--muted);">자동 생성</span></span>
-            <span class="chip">캐치테이블 이용계약서 <span style="color:var(--muted);">담당자 확인</span></span>
-          </div>
+          <p class="cap">캐치테이블 이용계약서는 담당자가 확인·첨부합니다 — 매장에서 올리실 필요 없어요.</p>
         </div>
 
         <button class="btn btn-primary btn-block" type="submit" style="margin-top:22px;">제출하기</button>
       </form>
     </div>
   </div>
+
+  <style>
+    .tpl-guide{margin:14px 0 6px;padding:12px 14px;border:1px dashed var(--brand,#FB6220);
+      border-radius:12px;background:rgba(251,98,32,.06);display:flex;flex-direction:column;gap:10px;}
+    .tpl-guide .tg-msg{font-size:13px;color:var(--ink,#222);}
+    .tpl-guide .tg-links{display:flex;gap:10px;flex-wrap:wrap;}
+    .tpl-btn{display:inline-block;padding:8px 14px;border:1px solid var(--brand,#FB6220);
+      border-radius:10px;color:var(--brand,#FB6220);background:#fff;font-size:13px;font-weight:600;
+      text-decoration:none;}
+    .tpl-btn:hover{background:var(--brand,#FB6220);color:#fff;}
+  </style>
 
   <script>
     // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 + 첨부 카운트 갱신
