@@ -473,9 +473,10 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
   }
 });
 
-// ── NHN 심사 결과 주기 동기화 ──────────────────────────────────────────────
-// NHN은 API가 없어 콘솔의 "발신번호 목록"을 봇이 읽어와 매장별 상태를 갱신한다.
-// 상태: requested(심사중) → registered(등록완료) / rejected(반려, 사유 포함)
+// ── NHN 심사 결과 주기 동기화 (API 기반) ──────────────────────────────────
+// NHN Cloud SMS API(sendNos)로 발신번호 상태를 조회한다. 로그인/브라우저 불필요.
+//   목록에 있음+blockYn!=Y → registered(승인) / 있음+blockYn=Y → rejected(거부)
+//   목록에 없음 → 알 수 없음(심사중 등) → 상태 변경하지 않음
 let nhnSyncRunning = false;
 async function runNhnSync(log = console.log) {
   if (nhnSyncRunning) {
@@ -484,32 +485,59 @@ async function runNhnSync(log = console.log) {
   }
   nhnSyncRunning = true;
   try {
-    const { scrapeStatuses } = require('./nhn/syncStatus');
-    // 조회도 제출과 동일하게 기본 창 표시(headless는 NHN 콘솔 로딩이 불안정).
-    // 창을 숨기려면 NHN_HEADLESS=1 로 실행. (제출과 동시에 프로필을 열지 않도록 withNhnLock으로 직렬화)
-    const headless = String(process.env.NHN_HEADLESS || '').trim() === '1';
-    const rows = await withNhnLock(() => scrapeStatuses({ headless, log }));
+    const { fetchByNumber, isConfigured } = require('./nhn/apiStatus');
+    if (!isConfigured()) {
+      log('[nhn-sync] NHN_SMS_APPKEY/SECRETKEY 미설정 — 건너뜀');
+      return { skipped: true, reason: 'no-keys' };
+    }
+
     let updated = 0;
-    for (const r of rows) {
-      const store = findStoreByPhone(r.phone);
-      if (!store) continue;
-      const statusChanged = store.nhn_status !== r.status;
-      if (statusChanged || (r.reason && store.nhn_reject_reason !== r.reason)) {
-        setNhnResult(store.id, r.status, r.reason);
+    let checked = 0;
+    for (const store of listStores()) {
+      if (!store.phone_numbers) continue;
+      const digitsList = String(store.phone_numbers)
+        .split(/[,/\n;]/)
+        .map((p) => p.replace(/[^0-9]/g, ''))
+        .filter(Boolean);
+      if (!digitsList.length) continue;
+
+      // 번호를 콕 집어 조회(계정 발신번호가 많아도 누락 없음)
+      let newStatus = null;
+      let reason = null;
+      let matchedPhone = null;
+      for (const d of digitsList) {
+        checked += 1;
+        // eslint-disable-next-line no-await-in-loop
+        const hit = await fetchByNumber(d).catch((e) => {
+          log(`[nhn-sync] ${store.name} (${d}) 조회 오류: ${e.message}`);
+          return undefined; // 오류는 '판정 불가'로 처리(상태 유지)
+        });
+        if (hit) {
+          matchedPhone = d;
+          if (hit.blockYn === 'Y') { newStatus = 'rejected'; reason = hit.blockReason || null; }
+          else { newStatus = 'registered'; }
+          break;
+        }
+      }
+      // 어느 번호도 목록에 없으면(심사중 등) 상태 변경하지 않음 — 승인/거부로만 갱신
+      if (!newStatus) continue;
+
+      const statusChanged = store.nhn_status !== newStatus;
+      if (statusChanged || (reason && store.nhn_reject_reason !== reason)) {
+        setNhnResult(store.id, newStatus, reason);
         updated += 1;
-        log(`[nhn-sync] ${store.name} (${r.phone}) → ${r.status}${r.reason ? ' / ' + r.reason : ''}`);
-        // 등록완료/반려로 "바뀐" 순간에만 슬랙 알림 (심사중 갱신 등은 알리지 않음)
-        if (statusChanged && (r.status === 'registered' || r.status === 'rejected')) {
+        log(`[nhn-sync] ${store.name} (${matchedPhone}) → ${newStatus}${reason ? ' / ' + reason : ''}`);
+        if (statusChanged && (newStatus === 'registered' || newStatus === 'rejected')) {
           const msg =
-            r.status === 'registered'
-              ? `✅ [발신번호 등록완료] ${store.name} · ${r.phone}`
-              : `🔴 [발신번호 반려] ${store.name} · ${r.phone}${r.reason ? `\n사유: ${r.reason}` : ''}`;
+            newStatus === 'registered'
+              ? `✅ [발신번호 승인/등록완료] ${store.name} · ${matchedPhone}`
+              : `🔴 [발신번호 거부] ${store.name} · ${matchedPhone}${reason ? `\n사유: ${reason}` : ''}`;
           notifySlack(msg, log).catch(() => {});
         }
       }
     }
-    log(`[nhn-sync] 완료: ${rows.length}건 조회, ${updated}건 갱신`);
-    return { ok: true, scanned: rows.length, updated };
+    log(`[nhn-sync] 완료: 번호 ${checked}건 조회, ${updated}건 갱신`);
+    return { ok: true, checked, updated };
   } finally {
     nhnSyncRunning = false;
   }
@@ -521,9 +549,7 @@ app.post('/admin/nhn-sync', async (req, res) => {
     await runNhnSync();
     res.redirect('/admin');
   } catch (e) {
-    const hint = /세션|session|storageState|nhn-session/.test(e.message)
-      ? '\n\nNHN 로그인 세션 문제일 수 있어요 → 터미널에서 `node nhn/capture-session.js` 재실행 후 다시 시도하세요.'
-      : '\n\n화면 구조가 바뀌었을 수 있어요 → `node nhn/syncStatus.js probe` 로 목록 화면을 덤프해 확인하세요.';
+    const hint = '\n\n.env 의 NHN_SMS_APPKEY / NHN_SMS_SECRETKEY 값을 확인하세요. (NHN 콘솔 → SMS → URL & Appkey)';
     res.status(500).send('NHN 상태 조회 실패: ' + e.message + hint);
   }
 });
@@ -576,14 +602,14 @@ app.listen(PORT, () => {
   //  · 로그인 프로필(nhn/nhn-profile)이 있을 때만 동작
   //  · 조회 시 브라우저 창이 잠깐 떴다 닫힘(정상). 창이 거슬리면 NHN_SYNC=0 으로 끄고 수동 새로고침만 사용.
   const syncEnabled = process.env.NHN_SYNC !== '0';
-  const sessionExists = hasSession();
-  if (syncEnabled && sessionExists) {
-    const minutes = Math.max(10, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '180', 10) || 180);
-    console.log(`NHN 심사 상태 자동 조회: ${minutes}분마다 실행`);
+  const { isConfigured: nhnApiReady } = require('./nhn/apiStatus');
+  if (syncEnabled && nhnApiReady()) {
+    const minutes = Math.max(5, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '30', 10) || 30);
+    console.log(`NHN 심사 상태 자동 조회(API): ${minutes}분마다 실행`);
     const tick = () => runNhnSync().catch((e) => console.error('[nhn-sync] 오류:', e.message));
-    setTimeout(tick, 15000); // 기동 15초 후 1회
+    setTimeout(tick, 5000); // 기동 5초 후 1회
     setInterval(tick, minutes * 60 * 1000);
-  } else if (syncEnabled && !sessionExists) {
-    console.log('NHN 자동 조회 대기: 로그인 세션이 없어요 → `node nhn/capture-session.js` 실행 후 재기동하면 켜집니다.');
+  } else if (syncEnabled && !nhnApiReady()) {
+    console.log('NHN 자동 조회 대기: .env 에 NHN_SMS_APPKEY/SECRETKEY 넣고 재기동하면 켜집니다.');
   }
 });
