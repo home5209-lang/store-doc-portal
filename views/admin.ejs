@@ -75,7 +75,7 @@
         <button type="button" class="fchip" data-f="ready">신청 대기</button>
         <button type="button" class="fchip" data-f="review">심사중</button>
         <button type="button" class="fchip" data-f="done">등록완료</button>
-        <button type="button" class="fchip" data-f="rejected">반려</button>
+        <button type="button" class="fchip" data-f="rejected">거부</button>
       </div>
       <select id="storeSort" class="fsort">
         <option value="default">등록순(최신)</option>
@@ -110,7 +110,7 @@
             <% if (store.nhn_status === 'registered') { %>
               <span class="nhn-stat done"><span class="dot"></span>등록완료</span>
             <% } else if (store.nhn_status === 'rejected') { %>
-              <span class="nhn-stat rejected"><span class="dot"></span>반려</span>
+              <span class="nhn-stat rejected"><span class="dot"></span>거부</span>
               <% if (store.nhn_reject_reason) { %><span class="reject-reason">사유: <%= store.nhn_reject_reason %></span><% } %>
               <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
                 <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
