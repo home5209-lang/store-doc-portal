@@ -24,6 +24,7 @@ const {
   userStats
 } = require('./db');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
+const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
 const { notifySlack } = require('./notify');
@@ -32,7 +33,8 @@ const { withNhnLock, hasSession } = require('./nhn/session');
 const app = express();
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '8mb' }));
+app.use(express.json({ limit: '8mb' })); // 서명(dataURL) 전송용 여유 한도
 app.use(express.static(path.join(__dirname, 'public')));
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
@@ -112,27 +114,80 @@ app.get('/upload/:storeId/:token', (req, res) => {
   res.render('upload', { store, docTypes: DOC_TYPES, error: null, token });
 });
 
-// 빈 양식(사용승낙서/재직증명서) 다운로드 — 매장이 이 양식을 받아 작성 후 업로드한다.
-app.get('/upload/:storeId/:token/form/:kind', (req, res) => {
+// 사용승낙서/재직증명서: 매장이 브라우저에서 작성 + 손서명 → PDF 생성·첨부 (AJAX)
+app.post('/upload/:storeId/:token/sign/:kind', async (req, res) => {
   const { storeId, token, kind } = req.params;
   const check = verifyUploadToken(storeId, token);
   if (!check.valid) {
-    return res.status(check.reason === 'expired' ? 410 : 403).render('link-invalid', { reason: check.reason });
+    return res.status(check.reason === 'expired' ? 410 : 403).json({ ok: false, error: '링크가 만료되었습니다.' });
   }
-  const fileName = FORM_TEMPLATES[kind];
-  if (!fileName) return res.status(404).send('양식을 찾을 수 없습니다.');
-  const filePath = path.join(TEMPLATES_ROOT, fileName);
-  if (!fs.existsSync(filePath)) return res.status(404).send('양식 파일이 없습니다.');
-  res.download(filePath, fileName);
+  if (kind !== 'consent' && kind !== 'employment') {
+    return res.status(404).json({ ok: false, error: '알 수 없는 서류입니다.' });
+  }
+
+  const b = req.body || {};
+  // 서명(dataURL) → PNG 버퍼
+  const m = /^data:image\/png;base64,(.+)$/.exec(String(b.signature || ''));
+  const signature = m ? Buffer.from(m[1], 'base64') : null;
+  if (!signature) return res.status(400).json({ ok: false, error: '서명이 필요합니다.' });
+
+  // 매장이 입력한 값 저장
+  upsertStore({
+    id: storeId,
+    name: b.name,
+    owner_name: b.owner_name,
+    biz_reg_no: b.biz_reg_no,
+    contact_name: null,
+    contact_title: b.contact_title,
+    phone_numbers: b.phone_numbers
+  });
+  const store = getStore(storeId);
+
+  try {
+    if (kind === 'consent') {
+      const out = path.join(GENERATED_ROOT, storeId, '사용승낙서.pdf');
+      await generateConsentDoc(store, { signature }, out);
+      removeDocumentsOfType(storeId, DOC_TYPES.CONSENT);
+      addDocument({
+        store_id: storeId, doc_type: DOC_TYPES.CONSENT,
+        original_name: docFileName(store, DOC_TYPES.CONSENT, '.pdf'), file_path: out, source: 'esign'
+      });
+    } else {
+      const out = path.join(GENERATED_ROOT, storeId, '재직증명서.pdf');
+      await generateEmploymentCert(store, {
+        signature, birth: b.birth || '', period: b.period || '', issueDate: b.issueDate || ''
+      }, out);
+      removeDocumentsOfType(storeId, DOC_TYPES.EMPLOYMENT_CERT);
+      addDocument({
+        store_id: storeId, doc_type: DOC_TYPES.EMPLOYMENT_CERT,
+        original_name: docFileName(store, DOC_TYPES.EMPLOYMENT_CERT, '.pdf'), file_path: out, source: 'esign'
+      });
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 매장용 서류 미리보기 — 방금 서명한 PDF를 토큰으로 인라인 확인
+app.get('/upload/:storeId/:token/preview/:kind', (req, res) => {
+  const { storeId, token, kind } = req.params;
+  const check = verifyUploadToken(storeId, token);
+  if (!check.valid) return res.status(403).send('링크가 만료되었습니다.');
+  const type = kind === 'consent' ? DOC_TYPES.CONSENT : kind === 'employment' ? DOC_TYPES.EMPLOYMENT_CERT : null;
+  if (!type) return res.status(404).send('알 수 없는 서류입니다.');
+  const doc = getDocumentsForStore(storeId).find((d) => d.doc_type === type);
+  if (!doc || !fs.existsSync(doc.file_path)) return res.status(404).send('아직 작성된 서류가 없습니다.');
+  res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  res.setHeader('Content-Disposition', 'inline; filename="preview.pdf"');
+  res.sendFile(path.resolve(doc.file_path));
 });
 
 app.post(
   '/upload/:storeId/:token',
   upload.fields([
     { name: 'telecom_proof', maxCount: 1 },
-    { name: 'biz_reg', maxCount: 1 },
-    { name: 'consent', maxCount: 1 },
-    { name: 'employment', maxCount: 1 }
+    { name: 'biz_reg', maxCount: 1 }
   ]),
   async (req, res) => {
     const { storeId, token } = req.params;
@@ -143,34 +198,35 @@ app.post(
 
     const { name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers } = req.body;
 
-    // 매장이 직접 올려야 하는 서류 4종 (통신증명원 / 사업자등록증 / 사용승낙서 / 재직증명서)
+    // 매장 정보 저장 (서명 단계에서도 저장되지만 최종값 반영)
+    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers });
+    const store = getStore(storeId);
+
+    // 검증: 파일 2종(통신증명원·사업자등록증) + 서명 2종(승낙서·재직증명서 — 앞서 작성·서명으로 첨부됨)
+    const docs = getDocumentsForStore(storeId);
+    const hasConsent = docs.some((d) => d.doc_type === DOC_TYPES.CONSENT);
+    const hasEmployment = docs.some((d) => d.doc_type === DOC_TYPES.EMPLOYMENT_CERT);
     const missing = [];
     if (!req.files?.telecom_proof) missing.push('통신서비스 이용증명원');
     if (!req.files?.biz_reg) missing.push('사업자 등록증');
-    if (!req.files?.consent) missing.push('사용 승낙서');
-    if (!req.files?.employment) missing.push('재직 증명서');
+    if (!hasConsent) missing.push('사용 승낙서(작성·서명)');
+    if (!hasEmployment) missing.push('재직 증명서(작성·서명)');
     if (missing.length) {
-      const store = getStore(storeId);
       return res.render('upload', {
         store,
         docTypes: DOC_TYPES,
-        error: `다음 서류를 첨부해주세요: ${missing.join(', ')}`,
+        error: `다음 항목을 완료해주세요: ${missing.join(', ')}`,
         token
       });
     }
 
-    // 1. 매장 정보 저장
-    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers });
-    const store = getStore(storeId);
-
-    // 2. 매장이 직접 올린 서류 4건 기록 (모두 매장 업로드본 — 자동 생성 없음)
-    const uploads = [
+    // 파일 2종 기록 (재제출 대비 기존 동일 종류는 정리 후 추가)
+    const fileUploads = [
       [DOC_TYPES.TELECOM_PROOF, req.files.telecom_proof[0]],
-      [DOC_TYPES.BIZ_REG, req.files.biz_reg[0]],
-      [DOC_TYPES.CONSENT, req.files.consent[0]],
-      [DOC_TYPES.EMPLOYMENT_CERT, req.files.employment[0]]
+      [DOC_TYPES.BIZ_REG, req.files.biz_reg[0]]
     ];
-    for (const [type, file] of uploads) {
+    for (const [type, file] of fileUploads) {
+      removeDocumentsOfType(storeId, type);
       addDocument({
         store_id: storeId,
         doc_type: type,
@@ -180,9 +236,7 @@ app.post(
       });
     }
 
-    // 3. 계약서(캐치테이블 이용계약서)는 매장이 아니라 운영자가 /admin 에서 첨부한다.
-    //    (모두싸인 후보 선택 또는 직접 업로드 — GET /admin/contract-candidates 등 참고)
-
+    // 계약서(캐치테이블 이용계약서)는 운영자가 /admin 에서 첨부한다.
     markSubmitted(storeId);
     res.render('submitted', { store });
   }

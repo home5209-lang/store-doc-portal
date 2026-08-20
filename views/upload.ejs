@@ -14,14 +14,14 @@
     <div class="card">
       <p class="eyebrow">서류 제출</p>
       <h1 class="title"><%= store.name === '매장명 미입력' ? '매장 정보를 입력해주세요' : store.name %></h1>
-      <p class="lead">아래 정보를 채우고 서류 4개를 올려주세요. 사용 승낙서와 재직 증명서는 제공되는 양식을 받아 작성·날인 후 올려주시면 됩니다.</p>
+      <p class="lead">아래 정보를 채우고, 파일 2개(통신서비스 이용증명원·사업자등록증)를 올려주세요. 사용 승낙서와 재직 증명서는 <b>화면의 양식을 보고 (인) 자리에 직접 서명</b>하면 됩니다.</p>
 
       <div class="steps" aria-hidden="true" style="margin-top:16px;">
         <span class="bar on"></span><span class="bar on"></span><span class="bar"></span>
       </div>
       <div class="steplabels">
         <span class="done">✓ 매장 정보</span>
-        <span class="cur">서류 첨부</span>
+        <span class="cur">서류 제출</span>
         <span>제출 완료</span>
       </div>
 
@@ -29,7 +29,7 @@
         <div class="alert alert-error" style="margin-top:16px;"><%= error %></div>
       <% } %>
 
-      <form method="POST" enctype="multipart/form-data">
+      <form method="POST" enctype="multipart/form-data" id="mainForm">
         <div class="field">
           <label>매장명 <span class="req">*</span></label>
           <input class="input" type="text" name="name" value="<%= store.name === '매장명 미입력' ? '' : store.name %>" required />
@@ -61,11 +61,11 @@
         <hr class="divider" />
 
         <div class="count-callout">
-          <span class="l">직접 올릴 서류</span>
-          <span class="n"><span id="upcount">0</span> / 4 첨부</span>
+          <span class="l">제출 항목</span>
+          <span class="n"><span id="upcount">0</span> / 4 완료</span>
         </div>
 
-        <p class="section-label">첨부 서류 (4개)</p>
+        <p class="section-label">첨부 파일 (2개)</p>
 
         <label class="up">
           <span class="ic">
@@ -73,7 +73,8 @@
           </span>
           <span class="meta">
             <span class="t">통신서비스 이용증명원 <span class="req">*</span></span>
-            <span class="d">통신사에서 발급받은 파일 · 최근 3개월 이내</span>
+            <span class="d">통신사 발급 파일 · 최근 3개월 이내</span>
+            <span class="d warn-open">마스킹(가림) 없이 발급자 정보·번호가 모두 보여야 합니다</span>
             <span class="fname"></span>
           </span>
           <span class="pill">파일 선택</span>
@@ -94,38 +95,32 @@
           <input type="file" name="biz_reg" required />
         </label>
 
-        <label class="up">
+        <p class="section-label" style="margin-top:20px;">양식 보고 서명 (2개)</p>
+
+        <div class="up sign-card" id="card-consent">
           <span class="ic">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </span>
           <span class="meta">
             <span class="t">사용 승낙서 <span class="req">*</span></span>
-            <span class="d">위 양식을 받아 작성 후 업로드</span>
-            <span class="fname"></span>
+            <span class="d">양식을 보고 (인) 자리에 서명하면 자동 첨부됩니다</span>
+            <span class="fname" id="done-consent"></span>
+            <a class="preview-link" id="prev-consent" href="/upload/<%= store.id %>/<%= token %>/preview/consent" target="_blank" style="display:none;">📄 작성한 서류 미리보기</a>
           </span>
-          <span class="pill">파일 선택</span>
-          <input type="file" name="consent" required />
-        </label>
-        <div class="doc-actions">
-          <a class="mini-btn" href="/upload/<%= store.id %>/<%= token %>/form/consent">⬇ 양식 받기</a>
-          <button type="button" class="mini-btn ghost" data-ex="/examples/consent_example.png">🔍 작성 예시</button>
+          <button type="button" class="pill" data-sign="consent">양식 보고 서명</button>
         </div>
 
-        <label class="up">
+        <div class="up sign-card" id="card-employment">
           <span class="ic">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </span>
           <span class="meta">
             <span class="t">재직 증명서 <span class="req">*</span></span>
-            <span class="d">위 양식을 받아 작성·날인(직인) 후 업로드</span>
-            <span class="fname"></span>
+            <span class="d">생년월일·재직기간 입력 후 (인) 자리에 서명하면 자동 첨부됩니다</span>
+            <span class="fname" id="done-employment"></span>
+            <a class="preview-link" id="prev-employment" href="/upload/<%= store.id %>/<%= token %>/preview/employment" target="_blank" style="display:none;">📄 작성한 서류 미리보기</a>
           </span>
-          <span class="pill">파일 선택</span>
-          <input type="file" name="employment" required />
-        </label>
-        <div class="doc-actions">
-          <a class="mini-btn" href="/upload/<%= store.id %>/<%= token %>/form/employment">⬇ 양식 받기</a>
-          <button type="button" class="mini-btn ghost" data-ex="/examples/employment_example.png">🔍 작성 예시</button>
+          <button type="button" class="pill" data-sign="employment">양식 보고 서명</button>
         </div>
 
         <div class="autobox">
@@ -137,74 +132,184 @@
     </div>
   </div>
 
-  <style>
-    .warn-mask{color:#c0392b !important;font-weight:700;}
-    .doc-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:-6px 2px 2px;}
-    .mini-btn{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border:1px solid var(--brand,#FB6220);
-      border-radius:9px;color:var(--brand,#FB6220);background:#fff;font-size:12.5px;font-weight:600;
-      text-decoration:none;cursor:pointer;}
-    .mini-btn:hover{background:var(--brand,#FB6220);color:#fff;}
-    .mini-btn.ghost{color:#8a5a2a;border-color:#e3c9b3;}
-    .mini-btn.ghost:hover{background:#8a5a2a;color:#fff;border-color:#8a5a2a;}
-    .ex-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;
-      align-items:flex-start;justify-content:center;z-index:1000;overflow:auto;padding:24px;}
-    .ex-overlay.open{display:flex;}
-    .ex-box{background:#fff;border-radius:14px;padding:14px;max-width:840px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);}
-    .ex-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-    .ex-head .t{font-weight:700;font-size:14px;color:#222;}
-    .ex-close{padding:8px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;}
-    .ex-box img{width:100%;height:auto;display:block;border:1px solid #eee;border-radius:8px;}
-  </style>
-
-  <div id="exOverlay" class="ex-overlay" aria-hidden="true">
-    <div class="ex-box">
-      <div class="ex-head">
-        <span class="t">작성 예시 (실제 정보로 채워 제출하세요)</span>
-        <button type="button" id="exClose" class="ex-close">✕ 닫기</button>
+  <!-- 양식 보고 서명 모달 -->
+  <div id="signOverlay" class="sign-overlay" aria-hidden="true">
+    <div class="sign-box">
+      <div class="sign-head">
+        <span class="t" id="signTitle">양식 보고 서명</span>
+        <button type="button" id="signClose" class="ex-close">✕ 닫기</button>
       </div>
-      <img id="exImg" src="" alt="작성 예시" />
+      <p class="sign-guide">아래 양식의 <b>(인) 자리 서명란</b>에 손가락/마우스로 서명해주세요.</p>
+      <div id="signDoc"></div>
+      <div class="sign-foot">
+        <button type="button" id="signClear" class="ex-close">서명 지우기</button>
+        <button type="button" id="signCancel" class="ex-close">취소</button>
+        <button type="button" id="signSubmit" class="btn btn-primary">확인하고 첨부</button>
+      </div>
     </div>
   </div>
 
-  <script>
-    // 예시 보기 팝업
-    (function () {
-      var overlay = document.getElementById('exOverlay');
-      var img = document.getElementById('exImg');
-      function openEx(src) { img.src = src; overlay.classList.add('open'); }
-      function closeEx() { overlay.classList.remove('open'); img.src = ''; }
-      document.querySelectorAll('[data-ex]').forEach(function (b) {
-        b.addEventListener('click', function () { openEx(b.getAttribute('data-ex')); });
-      });
-      document.getElementById('exClose').addEventListener('click', closeEx);
-      overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEx(); });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeEx(); });
-    })();
+  <style>
+    .warn-mask{color:#c0392b !important;font-weight:700;}
+    .warn-open{color:#1C6B45 !important;font-weight:700;}
+    .sign-card .pill{border:none;cursor:pointer;font:inherit;}
+    .preview-link{margin-top:4px;font-size:12.5px;color:#FB6220;font-weight:600;text-decoration:none;}
+    .preview-link:hover{text-decoration:underline;}
+    .ex-close{padding:8px 14px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;}
+    .sign-overlay{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;
+      align-items:flex-start;justify-content:center;z-index:1000;overflow:auto;padding:20px;}
+    .sign-overlay.open{display:flex;}
+    .sign-box{background:#fff;border-radius:14px;padding:18px;max-width:700px;width:100%;
+      box-shadow:0 20px 60px rgba(0,0,0,.35);}
+    .sign-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+    .sign-head .t{font-weight:700;font-size:16px;color:#222;}
+    .sign-guide{font-size:13px;color:#c0392b;margin:0 0 12px;font-weight:600;}
+    .sign-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;}
 
-    // 업로드 타일: 파일 선택 시 파일명 표시 + 완료 상태 + 첨부 카운트 갱신
-    var upInputs = document.querySelectorAll('.up input[type=file]');
-    function refreshCount() {
-      var n = 0;
-      upInputs.forEach(function (i) { if (i.files && i.files.length) n += 1; });
-      var el = document.getElementById('upcount');
-      if (el) el.textContent = n;
+    /* 문서 양식(미리보기) */
+    .doc-paper{background:#fff;border:1px solid #ddd;border-radius:6px;padding:22px;color:#1c1c1c;
+      font-size:13px;line-height:1.75;}
+    .doc-paper.consent{border:2px solid #333;}
+    .doc-title{font-weight:700;font-size:16px;margin-bottom:8px;}
+    .doc-paper ul{list-style:disc;padding-left:20px;margin:8px 0;}
+    .doc-paper ol{list-style:decimal;padding-left:22px;margin:4px 0;}
+    .doc-title-c{text-align:center;font-weight:800;font-size:22px;letter-spacing:6px;margin-bottom:4px;}
+    .doc-rule{height:2px;background:#B0824A;margin:6px 0 14px;}
+    .doc-table{width:100%;border-collapse:collapse;margin:8px 0 14px;}
+    .doc-table th,.doc-table td{border:1px solid #333;padding:8px 10px;font-size:13px;vertical-align:middle;}
+    .doc-table th{background:#F3EFE7;width:34%;text-align:center;font-weight:700;}
+    .doc-inline{border:none;border-bottom:1px solid #FB6220;font-size:13px;padding:3px 4px;min-width:150px;background:#fff7f2;}
+    .center{text-align:center;}
+    .right{text-align:right;}
+    .sign-line{margin-top:16px;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+    .sign-slot{position:relative;display:inline-block;border:1.5px dashed #FB6220;border-radius:6px;background:#fffdfb;}
+    .sign-slot canvas{display:block;width:190px;height:56px;touch-action:none;}
+    .sign-slot .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e0a077;font-size:12px;pointer-events:none;}
+  </style>
+
+  <script>
+    function v(name){ var el=document.querySelector('[name="'+name+'"]'); return el?el.value.trim():''; }
+    function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function todayKo(){ var d=new Date(); return d.getFullYear()+' 년 '+(d.getMonth()+1)+' 월 '+d.getDate()+' 일'; }
+    var signed = { consent:false, employment:false };
+    var STORE_ID='<%= store.id %>', TOKEN='<%= token %>';
+
+    // 카운터
+    var fileInputs = document.querySelectorAll('.up input[type=file]');
+    function refreshCount(){
+      var n=0; fileInputs.forEach(function(i){ if(i.files&&i.files.length) n+=1; });
+      if(signed.consent) n+=1; if(signed.employment) n+=1;
+      var el=document.getElementById('upcount'); if(el) el.textContent=n;
     }
-    upInputs.forEach(function (input) {
-      input.addEventListener('change', function () {
-        var tile = input.closest('.up');
-        var fname = tile.querySelector('.fname');
-        var pill = tile.querySelector('.pill');
-        if (input.files && input.files.length) {
-          tile.classList.add('filled');
-          fname.textContent = '✓ ' + input.files[0].name;
-          if (pill) pill.textContent = '변경';
-        } else {
-          tile.classList.remove('filled');
-          fname.textContent = '';
-          if (pill) pill.textContent = '파일 선택';
-        }
+    fileInputs.forEach(function(input){
+      input.addEventListener('change', function(){
+        var tile=input.closest('.up'), fname=tile.querySelector('.fname'), pill=tile.querySelector('.pill');
+        if(input.files&&input.files.length){ tile.classList.add('filled'); fname.textContent='✓ '+input.files[0].name; if(pill)pill.textContent='변경'; }
+        else { tile.classList.remove('filled'); fname.textContent=''; if(pill)pill.textContent='파일 선택'; }
         refreshCount();
       });
+    });
+
+    // 서명패드 (문서 안 캔버스에 바인딩)
+    var padCanvas=null, padCtx=null, drawing=false, hasInk=false;
+    function bindPad(){
+      padCanvas=document.getElementById('signPad'); if(!padCanvas) return;
+      padCtx=padCanvas.getContext('2d'); drawing=false; hasInk=false;
+      function pos(e){ var r=padCanvas.getBoundingClientRect(); var cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left; var cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top; return {x:cx*(padCanvas.width/r.width), y:cy*(padCanvas.height/r.height)}; }
+      function start(e){ drawing=true; var p=pos(e); padCtx.beginPath(); padCtx.moveTo(p.x,p.y); hideic(); e.preventDefault(); }
+      function move(e){ if(!drawing)return; var p=pos(e); padCtx.lineTo(p.x,p.y); padCtx.strokeStyle='#14226e'; padCtx.lineWidth=2.4; padCtx.lineCap='round'; padCtx.stroke(); hasInk=true; e.preventDefault(); }
+      function up(){ drawing=false; }
+      function hideic(){ var ph=padCanvas.parentNode.querySelector('.ph'); if(ph) ph.style.display='none'; }
+      padCanvas.addEventListener('mousedown',start); padCanvas.addEventListener('mousemove',move); window.addEventListener('mouseup',up);
+      padCanvas.addEventListener('touchstart',start,{passive:false}); padCanvas.addEventListener('touchmove',move,{passive:false}); padCanvas.addEventListener('touchend',up);
+    }
+    function clearPad(){ if(padCtx){ padCtx.clearRect(0,0,padCanvas.width,padCanvas.height); hasInk=false; var ph=padCanvas.parentNode.querySelector('.ph'); if(ph) ph.style.display='flex'; } }
+
+    // 서명란 HTML (문서 안 (인) 자리)
+    function signSlot(){ return '<span class="sign-slot"><canvas id="signPad" width="380" height="112"></canvas><span class="ph">여기에 서명</span></span>'; }
+
+    // 문서 양식 HTML
+    function consentDoc(){
+      return '<div class="doc-paper consent">'
+        + '<div class="doc-title">전화번호 이용 승낙서</div>'
+        + '<p>발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.</p>'
+        + '<ul>'
+        + '<li>발신번호 명의자 정보: '+esc(v('owner_name'))+'</li>'
+        + '<li>계정 명의자 정보: 주식회사 와드</li>'
+        + '<li>목적: 마케팅메세지 발송</li>'
+        + '<li>전화번호 목록: '+esc(v('phone_numbers'))+'</li>'
+        + '<li>별첨: 아래와 같은 서류를 함께 제출할 것'
+        + '<ol><li>통신서비스이용증명원(전화번호 목록과 모두 일치할 것)</li><li>사업자등록증</li>'
+        + '<li>발신번호 명의자와 계정 명의자 간 관계를 확인할 수 있는 문서</li>'
+        + '<li>전화번호 목록에 임직원 번호가 포함된 경우 해당 임직원의 재직증명서</li></ol></li>'
+        + '</ul>'
+        + '<div class="sign-line">발신번호 명의자 : '+esc(v('owner_name'))+' &nbsp;'+signSlot()+' (인)</div>'
+        + '</div>';
+    }
+    function employmentDoc(){
+      return '<div class="doc-paper">'
+        + '<div class="doc-title-c">재 직 증 명 서</div><div class="doc-rule"></div>'
+        + '<table class="doc-table">'
+        + '<tr><th>성 명</th><td>'+esc(v('owner_name'))+'</td></tr>'
+        + '<tr><th>생년월일</th><td><input class="doc-inline" id="f-birth" placeholder="예: 1985. 03. 12"></td></tr>'
+        + '<tr><th>직 위</th><td>'+esc(v('contact_title'))+'</td></tr>'
+        + '<tr><th>재직 기간</th><td><input class="doc-inline" id="f-period" placeholder="예: 2020.01.01 ~ 현재"></td></tr>'
+        + '<tr><th>소속(상호명)</th><td>'+esc(v('name'))+'</td></tr>'
+        + '<tr><th>사업자등록번호</th><td>'+esc(v('biz_reg_no'))+'</td></tr>'
+        + '</table>'
+        + '<p class="center">위 사람은 상기 사업장에 재직하고 있음을 증명합니다.</p>'
+        + '<p class="center"><b>용도 : NHN Cloud 발신번호 등록 심사 제출용</b></p>'
+        + '<p class="center"><input class="doc-inline" id="f-issue" value="'+esc(todayKo())+'" style="text-align:center;min-width:200px;"></p>'
+        + '<div class="sign-line">대표자 : '+esc(v('owner_name'))+' &nbsp;'+signSlot()+' (인)</div>'
+        + '</div>';
+    }
+
+    var overlay=document.getElementById('signOverlay'), docBox=document.getElementById('signDoc'), titleEl=document.getElementById('signTitle');
+    var currentKind=null;
+    function openSign(kind){
+      var need=['name','owner_name','biz_reg_no','phone_numbers','contact_title'];
+      for(var i=0;i<need.length;i++){ if(!v(need[i])){ alert('먼저 위의 매장 정보(매장명·대표자명·사업자등록번호·발신번호·직위)를 모두 입력해주세요.'); return; } }
+      currentKind=kind;
+      titleEl.textContent = kind==='consent' ? '사용 승낙서 서명' : '재직 증명서 작성·서명';
+      docBox.innerHTML = kind==='consent' ? consentDoc() : employmentDoc();
+      bindPad();
+      overlay.classList.add('open');
+    }
+    function closeSign(){ overlay.classList.remove('open'); currentKind=null; }
+    document.querySelectorAll('[data-sign]').forEach(function(b){ b.addEventListener('click',function(){ openSign(b.getAttribute('data-sign')); }); });
+    document.getElementById('signClose').addEventListener('click',closeSign);
+    document.getElementById('signCancel').addEventListener('click',closeSign);
+    document.getElementById('signClear').addEventListener('click',clearPad);
+    overlay.addEventListener('click',function(e){ if(e.target===overlay) closeSign(); });
+
+    document.getElementById('signSubmit').addEventListener('click', function(){
+      if(!hasInk){ alert('(인) 자리에 서명을 해주세요.'); return; }
+      var payload = { name:v('name'), owner_name:v('owner_name'), biz_reg_no:v('biz_reg_no'),
+        phone_numbers:v('phone_numbers'), contact_title:v('contact_title'), signature: padCanvas.toDataURL('image/png') };
+      if(currentKind==='employment'){
+        var birth=(document.getElementById('f-birth')||{}).value||''; birth=birth.trim();
+        var period=(document.getElementById('f-period')||{}).value||''; period=period.trim();
+        var issue=(document.getElementById('f-issue')||{}).value||''; issue=issue.trim();
+        if(!birth||!period||!issue){ alert('생년월일·재직기간·발급일을 입력해주세요.'); return; }
+        payload.birth=birth; payload.period=period; payload.issueDate=issue;
+      }
+      var kind=currentKind, btn=this; btn.disabled=true; btn.textContent='저장 중…';
+      fetch('/upload/'+STORE_ID+'/'+TOKEN+'/sign/'+kind, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      .then(function(r){return r.json();}).then(function(res){
+        btn.disabled=false; btn.textContent='확인하고 첨부';
+        if(!res.ok){ alert('저장 실패: '+(res.error||'')); return; }
+        signed[kind]=true;
+        var card=document.getElementById('card-'+kind); card.classList.add('filled');
+        document.getElementById('done-'+kind).textContent='✓ 작성·서명 완료';
+        card.querySelector('[data-sign]').textContent='다시 작성';
+        var pv=document.getElementById('prev-'+kind);
+        if(pv){ pv.href='/upload/'+STORE_ID+'/'+TOKEN+'/preview/'+kind+'?t='+Date.now(); pv.style.display='inline-block'; }
+        refreshCount(); closeSign();
+      }).catch(function(e){ btn.disabled=false; btn.textContent='확인하고 첨부'; alert('저장 오류: '+e.message); });
+    });
+
+    document.getElementById('mainForm').addEventListener('submit', function(e){
+      if(!signed.consent || !signed.employment){ e.preventDefault(); alert('사용 승낙서와 재직 증명서를 양식에서 서명해주세요.'); }
     });
   </script>
 </body>
