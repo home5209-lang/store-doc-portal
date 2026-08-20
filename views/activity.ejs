@@ -12,14 +12,20 @@
       <span class="userbar">
         <span class="who"><%= currentUser ? currentUser.name : '' %></span>
         <a class="btn btn-ghost btn-sm" href="/admin">← 대시보드</a>
+        <a class="btn btn-ghost btn-sm" href="/admin/members">담당자별 통계</a>
         <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
       </span>
     </div>
 
     <div class="card" style="margin-bottom:16px;">
       <p class="eyebrow">활동 로그</p>
-      <h1 class="title" style="font-size:19px;">누가 · 언제 · 무엇을</h1>
-      <p class="lead">건별 작업 내역입니다. 최근 300건까지 표시됩니다.</p>
+      <% if (typeof filterUser !== 'undefined' && filterUser) { %>
+        <h1 class="title" style="font-size:19px;"><%= (entries[0] && entries[0].user_name) || filterUser %> 님의 활동</h1>
+        <p class="lead"><%= filterUser %> · 최근 300건 <a href="/admin/activity" style="margin-left:8px;">전체 보기 →</a></p>
+      <% } else { %>
+        <h1 class="title" style="font-size:19px;">누가 · 언제 · 무엇을</h1>
+        <p class="lead">건별 작업 내역입니다. 최근 300건까지 표시됩니다.</p>
+      <% } %>
     </div>
 
     <div class="table-card">
