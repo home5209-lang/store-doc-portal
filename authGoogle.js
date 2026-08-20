@@ -97,6 +97,7 @@ function getAuthUrl(res) {
     redirect_uri: redirectUri(),
     response_type: 'code',
     scope: 'openid email profile',
+    state, // CSRF 방지용 state — 콜백에서 쿠키값과 대조 (이게 빠져서 로그인이 계속 튕겼음)
     hd: ALLOWED_DOMAIN, // 회사 도메인 힌트
     access_type: 'online',
     prompt: 'select_account'
