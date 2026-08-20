@@ -20,7 +20,8 @@ const {
   findStoreByPhone,
   addAudit,
   listAudit,
-  lastActorByStore
+  lastActorByStore,
+  userStats
 } = require('./db');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
@@ -260,9 +261,19 @@ app.get('/admin', (req, res) => {
   });
 });
 
-// 전체 활동 로그 (누가·언제·무엇을·어느 매장)
+// 전체 활동 로그 (누가·언제·무엇을·어느 매장). ?user=이메일 이면 그 담당자만.
 app.get('/admin/activity', (req, res) => {
-  res.render('activity', { entries: listAudit(300), currentUser: req.user });
+  const filterUser = req.query.user || null;
+  res.render('activity', {
+    entries: listAudit(300, filterUser),
+    currentUser: req.user,
+    filterUser
+  });
+});
+
+// 담당자별 사용량 통계
+app.get('/admin/members', (req, res) => {
+  res.render('members', { stats: userStats(), currentUser: req.user });
 });
 
 // 매장별 업로드 링크 발급/재발급. storeId가 오면 기존 매장에 새 토큰만 발급하고,

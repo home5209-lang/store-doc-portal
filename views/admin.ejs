@@ -16,6 +16,7 @@
         <% if (typeof currentUser !== 'undefined' && currentUser) { %>
           <span class="who"><%= currentUser.name %></span>
         <% } %>
+        <a class="btn btn-ghost btn-sm" href="/admin/members">담당자별 통계</a>
         <a class="btn btn-ghost btn-sm" href="/admin/activity">활동 로그</a>
         <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
       </span>

@@ -160,9 +160,73 @@ function addAudit({ user, action, store, detail }) {
   );
 }
 
-// 최근 활동 목록 (최신순)
-function listAudit(limit = 200) {
+// 최근 활동 목록 (최신순). userEmail을 주면 그 담당자 것만.
+function listAudit(limit = 200, userEmail = null) {
+  if (userEmail) {
+    return db
+      .prepare('SELECT * FROM audit_log WHERE user_email = ? ORDER BY id DESC LIMIT ?')
+      .all(userEmail, limit);
+  }
   return db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?').all(limit);
+}
+
+// 담당자별 사용량 통계.
+//  - 행동 카운트(제출/링크/계약서/교체/최근활동)는 audit_log 집계
+//  - 등록완료/거부는 "그 번호를 제출한 담당자" 기준으로 stores 상태를 귀속
+function userStats() {
+  const rows = db
+    .prepare(
+      `SELECT
+         COALESCE(user_email,'') AS email,
+         MAX(user_name)          AS name,
+         SUM(CASE WHEN action LIKE 'NHN 등록 신청%' THEN 1 ELSE 0 END) AS submits,
+         SUM(CASE WHEN action LIKE '업로드 링크%'   THEN 1 ELSE 0 END) AS links,
+         SUM(CASE WHEN action LIKE '계약서%'        THEN 1 ELSE 0 END) AS contracts,
+         SUM(CASE WHEN action = '서류 교체'         THEN 1 ELSE 0 END) AS replaces,
+         COUNT(*)                AS total,
+         MAX(created_at)         AS last_at
+       FROM audit_log
+       GROUP BY email`
+    )
+    .all();
+
+  // 매장별 "제출 담당자"(최신 제출 감사행) → 상태 귀속
+  const outcome = db
+    .prepare(
+      `SELECT sub.email AS email,
+         SUM(CASE WHEN s.nhn_status='registered' THEN 1 ELSE 0 END) AS registered,
+         SUM(CASE WHEN s.nhn_status='rejected'   THEN 1 ELSE 0 END) AS rejected
+       FROM (
+         SELECT a.store_id, COALESCE(a.user_email,'') AS email
+         FROM audit_log a
+         JOIN (SELECT store_id, MAX(id) AS mid
+               FROM audit_log
+               WHERE action LIKE 'NHN 등록 신청%' AND store_id IS NOT NULL
+               GROUP BY store_id) m
+           ON a.id = m.mid
+       ) sub
+       JOIN stores s ON s.id = sub.store_id
+       GROUP BY sub.email`
+    )
+    .all();
+
+  const outMap = {};
+  outcome.forEach((o) => { outMap[o.email] = o; });
+
+  return rows
+    .map((r) => ({
+      email: r.email,
+      name: r.name || r.email || '(미상)',
+      submits: r.submits || 0,
+      links: r.links || 0,
+      contracts: r.contracts || 0,
+      replaces: r.replaces || 0,
+      total: r.total || 0,
+      last_at: r.last_at,
+      registered: (outMap[r.email] && outMap[r.email].registered) || 0,
+      rejected: (outMap[r.email] && outMap[r.email].rejected) || 0
+    }))
+    .sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || '')));
 }
 
 // 매장별 "마지막 담당자" 맵 { storeId: {user_name, user_email, action, created_at} }
@@ -197,5 +261,6 @@ module.exports = {
   findStoreByPhone,
   addAudit,
   listAudit,
-  lastActorByStore
+  lastActorByStore,
+  userStats
 };

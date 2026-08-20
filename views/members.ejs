@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<%- include('partials/head', { title: '담당자별 통계 - 관리자' }) %>
+</head>
+<body>
+  <div class="wrap-wide">
+    <div class="brand">
+      <span class="dot">C</span>
+      <span class="name">발신 번호 등록 관리자</span>
+      <span class="sub">발신번호 등록 · 관리자</span>
+      <span class="userbar">
+        <span class="who"><%= currentUser ? currentUser.name : '' %></span>
+        <a class="btn btn-ghost btn-sm" href="/admin">← 대시보드</a>
+        <a class="btn btn-ghost btn-sm" href="/admin/activity">활동 로그</a>
+        <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
+      </span>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <p class="eyebrow">담당자별 통계</p>
+      <h1 class="title" style="font-size:19px;">누가 얼마나 처리했나</h1>
+      <p class="lead">담당자별 처리 실적입니다. 등록완료·거부는 그 번호를 제출한 담당자 기준으로 집계됩니다.</p>
+    </div>
+
+    <div class="table-card">
+      <% if (!stats || stats.length === 0) { %>
+        <div class="empty">아직 기록된 활동이 없어요.</div>
+      <% } else { %>
+        <table class="alog">
+          <thead>
+            <tr>
+              <th>담당자</th>
+              <th>NHN 제출</th>
+              <th>등록완료</th>
+              <th>거부</th>
+              <th>링크 발급</th>
+              <th>최근 활동</th>
+              <th>히스토리</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% stats.forEach(function (u) { %>
+              <tr>
+                <td class="u"><%= u.name %></td>
+                <td><%= u.submits %></td>
+                <td style="color:#1C6B45;font-weight:600;"><%= u.registered %></td>
+                <td style="color:#c0392b;font-weight:600;"><%= u.rejected %></td>
+                <td><%= u.links %></td>
+                <td class="t"><%= u.last_at || '-' %></td>
+                <td>
+                  <% if (u.email) { %>
+                    <a class="btn btn-ghost btn-sm" href="/admin/activity?user=<%= encodeURIComponent(u.email) %>">보기</a>
+                  <% } else { %>-<% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>
