@@ -14,6 +14,12 @@ const FONTS = {
   bold: path.join(FONT_DIR, 'NanumGothic-Bold.ttf')
 };
 
+// 원본 승낙서 양식(전화번호이용승낙서_template.docx)을 그대로 렌더한 배경 이미지.
+// 이 위에 값만 얹어서 원본과 100% 동일한 레이아웃을 보장한다.
+const CONSENT_BG = path.join(__dirname, 'assets', 'consent_bg.png');
+const A4_W = 595.304;
+const A4_H = 841.89;
+
 function renderToBuffer(build) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
@@ -50,64 +56,35 @@ function placeSignatureOver(doc, sig, centerX, centerY, w = 90) {
 }
 
 // ---------- 1. 전화번호 이용 승낙서 ----------
+// 원본 양식(docx)을 그대로 렌더한 배경 이미지 위에 값만 얹어, 레이아웃을 100% 동일하게 유지한다.
+// 좌표는 원본 PDF의 단어 bbox(pt, A4 595.3x841.9)에서 측정한 값.
 async function generateConsentDoc(store, opts, outPath) {
   const { signature = null } = opts || {};
   const owner = store.owner_name || '';
   const phones = store.phone_numbers || '';
 
-  const buffer = await renderToBuffer((doc) => {
-    doc.font('krb').fontSize(12).text('<전화번호 이용 승낙서 – 사업자(타사 소속 임직원 포함)>');
-    doc.moveDown(0.7);
+  const buffer = await new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 0 });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+    doc.registerFont('kr', FONTS.regular);
+    doc.registerFont('krb', FONTS.bold);
 
-    const boxX = doc.page.margins.left;
-    const boxTop = doc.y;
-    const boxW = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const pad = 18;
-    const innerX = boxX + pad;
-    const innerW = boxW - pad * 2;
+    // 배경: 원본 승낙서 양식
+    doc.image(CONSENT_BG, 0, 0, { width: A4_W, height: A4_H });
 
-    const para = (text, { font = 'kr', size = 11, gap = 6 } = {}) => {
-      doc.font(font).fontSize(size).text(text, innerX, doc.y, { width: innerW, lineGap: 3 });
-      doc.y += gap;
-    };
-    const blank = (h = 12) => { doc.y += h; };
-    const item = (marker, text, { markerX = innerX, textX = innerX + 18, size = 11, gap = 7 } = {}) => {
-      const startY = doc.y;
-      doc.font('kr').fontSize(size);
-      doc.text(marker, markerX, startY, { width: textX - markerX });
-      doc.text(text, textX, startY, { width: innerW - (textX - innerX), lineGap: 3 });
-      doc.y += gap;
-    };
+    // 값 얹기 (라벨 오른쪽 빈칸)
+    doc.fillColor('#000').font('kr').fontSize(11);
+    doc.text(owner, 197, 224, { lineBreak: false });     // 발신번호 명의자 정보:
+    doc.text(phones, 164, 307, { lineBreak: false });    // 전화번호 목록:
+    doc.text(owner, 155, 535, { lineBreak: false });     // 서명줄: 발신번호 명의자 :  ___
 
-    doc.y = boxTop + pad;
-    para('전화번호 이용 승낙서', { font: 'krb', size: 13, gap: 4 });
-    blank(10);
-    para('발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.', { gap: 6 });
-    blank(8);
-    item('•', `발신번호 명의자 정보: ${owner}`);
-    item('•', '계정 명의자 정보: 주식회사 와드');
-    item('•', '목적: 마케팅메세지 발송');
-    item('•', `전화번호 목록: ${phones}`);
-    item('•', '별첨: 아래와 같은 서류를 함께 제출할 것');
-    const nX = innerX + 20;
-    const nText = innerX + 42;
-    item('1)', '통신서비스이용증명원(전화번호 목록 내 기재되어 있는 전화번호와 모두 일치할 것)', { markerX: nX, textX: nText });
-    item('2)', '사업자등록증', { markerX: nX, textX: nText });
-    item('3)', '발신번호 명의자와 계정 명의자 간 관계를 확인할 수 있는 문서(예. 업무위수탁 계약서. 본점 – 지점 증빙서류 등)', { markerX: nX, textX: nText });
-    item('4)', '전화번호 목록에 임직원의 번호가 포함된 경우 해당 임직원의 재직증명서', { markerX: nX, textX: nText });
-    blank(26);
+    // 서명: "(인)" 위에 겹쳐 얹음 (넓힌 양식 기준 (인) x≈273)
+    placeSignatureOver(doc, signature, 273, 543, 82);
 
-    // 서명 줄: "발신번호 명의자 : {owner}   (인)"  — 서명은 (인) 위에 겹쳐 얹음
-    const lineY = doc.y;
-    doc.font('kr').fontSize(12);
-    const before = `발신번호 명의자 : ${owner}   `;
-    const inW = doc.widthOfString('(인)');
-    const inX = innerX + doc.widthOfString(before);
-    doc.text(before + '(인)', innerX, lineY, { continued: false });
-    placeSignatureOver(doc, signature, inX + inW / 2, lineY + 7, 90);
-    doc.y = lineY + 24;
-
-    doc.lineWidth(1).rect(boxX, boxTop, boxW, doc.y + pad - boxTop).stroke();
+    doc.end();
   });
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });

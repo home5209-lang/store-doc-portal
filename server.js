@@ -36,6 +36,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true, limit: '8mb' }));
 app.use(express.json({ limit: '8mb' })); // 서명(dataURL) 전송용 여유 한도
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/assets', express.static(path.join(__dirname, 'assets'))); // 양식 배경 이미지 등
 
 const UPLOAD_ROOT = path.join(__dirname, 'uploads');
 const GENERATED_ROOT = path.join(__dirname, 'generated');
