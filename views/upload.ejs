@@ -182,9 +182,18 @@
     .center{text-align:center;}
     .right{text-align:right;}
     .sign-line{margin-top:16px;display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+    .sign-line.left{justify-content:flex-start;}
     .sign-slot{position:relative;display:inline-block;border:1.5px dashed #FB6220;border-radius:6px;background:#fffdfb;}
     .sign-slot canvas{display:block;width:190px;height:56px;touch-action:none;}
     .sign-slot .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e0a077;font-size:12px;pointer-events:none;}
+
+    /* 실제 양식 이미지 위에서 서명 */
+    .tpl-wrap{position:relative;width:100%;max-width:600px;margin:0 auto;}
+    .tpl-img{width:100%;display:block;border:1px solid #e6e2dc;border-radius:4px;}
+    .tpl-wrap .ov{position:absolute;transform:translateY(-50%);white-space:nowrap;color:#111;line-height:1;font-family:inherit;}
+    .tpl-sign{position:absolute;transform:translateY(-50%);border:1.5px dashed #FB6220;border-radius:6px;background:rgba(251,98,32,.05);}
+    .tpl-sign canvas{display:block;width:100%;height:auto;aspect-ratio:380/112;touch-action:none;}
+    .tpl-sign .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e0a077;font-size:12px;pointer-events:none;}
   </style>
 
   <script>
@@ -225,25 +234,23 @@
     }
     function clearPad(){ if(padCtx){ padCtx.clearRect(0,0,padCanvas.width,padCanvas.height); hasInk=false; var ph=padCanvas.parentNode.querySelector('.ph'); if(ph) ph.style.display='flex'; } }
 
+    // 양식 이미지 위 오버레이(명의자·전화번호) 글자 크기를 이미지 폭에 맞춰 조정
+    function sizeOverlays(){ var w=document.getElementById('tplWrap'); if(!w) return; var px=Math.max(10, w.clientWidth*0.0231); w.querySelectorAll('.ov').forEach(function(e){ e.style.fontSize=px+'px'; }); }
+    window.addEventListener('resize', sizeOverlays);
+
     // 서명란 HTML (문서 안 (인) 자리)
     function signSlot(){ return '<span class="sign-slot"><canvas id="signPad" width="380" height="112"></canvas><span class="ph">여기에 서명</span></span>'; }
 
-    // 문서 양식 HTML
+    // 사용 승낙서: 실제 양식 이미지 위에 값 얹고 (인) 자리에 서명
     function consentDoc(){
-      return '<div class="doc-paper consent">'
-        + '<div class="doc-title">전화번호 이용 승낙서</div>'
-        + '<p>발신번호 명의자는 [*] 서비스 계정 명의자에게 발신번호 명의자의 아래와 같은 전화번호 사용을 허락함.</p>'
-        + '<ul>'
-        + '<li>발신번호 명의자 정보: '+esc(v('owner_name'))+'</li>'
-        + '<li>계정 명의자 정보: 주식회사 와드</li>'
-        + '<li>목적: 마케팅메세지 발송</li>'
-        + '<li>전화번호 목록: '+esc(v('phone_numbers'))+'</li>'
-        + '<li>별첨: 아래와 같은 서류를 함께 제출할 것'
-        + '<ol><li>통신서비스이용증명원(전화번호 목록과 모두 일치할 것)</li><li>사업자등록증</li>'
-        + '<li>발신번호 명의자와 계정 명의자 간 관계를 확인할 수 있는 문서</li>'
-        + '<li>전화번호 목록에 임직원 번호가 포함된 경우 해당 임직원의 재직증명서</li></ol></li>'
-        + '</ul>'
-        + '<div class="sign-line">발신번호 명의자 : '+esc(v('owner_name'))+' &nbsp;'+signSlot()+' (인)</div>'
+      return '<div class="tpl-wrap" id="tplWrap">'
+        + '<img class="tpl-img" src="/assets/consent_bg_view.png" alt="전화번호 이용 승낙서" onload="sizeOverlays()">'
+        + '<span class="ov" style="left:29%;top:30%;">'+esc(v('owner_name'))+'</span>'
+        + '<span class="ov" style="left:22%;top:46.5%;">'+esc(v('phone_numbers'))+'</span>'
+        + '<span class="ov" style="left:20.1%;top:91.8%;">'+esc(v('owner_name'))+'</span>'
+        + '<span class="tpl-sign" style="left:27%;top:91.9%;width:40%;">'
+        +   '<canvas id="signPad" width="380" height="112"></canvas><span class="ph">여기에 서명</span>'
+        + '</span>'
         + '</div>';
     }
     function employmentDoc(){
