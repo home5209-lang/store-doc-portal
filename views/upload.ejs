@@ -194,6 +194,30 @@
     .tpl-sign{position:absolute;transform:translateY(-50%);border:1.5px dashed #FB6220;border-radius:6px;background:rgba(251,98,32,.05);}
     .tpl-sign canvas{display:block;width:100%;height:auto;aspect-ratio:380/112;touch-action:none;}
     .tpl-sign .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e0a077;font-size:12px;pointer-events:none;}
+
+    /* 재직증명서 — 증명서 형태 */
+    .cert{background:#fff;border:2px solid #2B2B2B;padding:30px 34px 40px;position:relative;}
+    .cert::after{content:"";position:absolute;inset:6px;border:1px solid #9A9A9A;pointer-events:none;}
+    .cert-title{text-align:center;font-size:26px;font-weight:800;letter-spacing:8px;color:#1B1B1B;margin:6px 0 0;}
+    .cert-rule{width:180px;height:1.6px;background:#B0824A;margin:12px auto 26px;}
+    .cert-rows{max-width:440px;margin:0 auto;}
+    .cert-row{display:flex;align-items:flex-end;gap:8px;margin-bottom:16px;}
+    .cert-row .cl{flex:0 0 118px;font-weight:700;color:#3A3A3A;font-size:13px;}
+    .cert-row .cc{flex:0 0 8px;color:#3A3A3A;}
+    .cert-row .cv{flex:1;min-width:0;border-bottom:1px solid #CFC7BB;padding:2px 2px 4px;font-size:13px;color:#111;}
+    .cert-input{border:none;outline:none;width:100%;font:inherit;font-size:13px;color:#111;background:#fff7f2;padding:1px 3px;}
+    .cert-stmt{text-align:center;font-size:13px;color:#111;margin:28px 0 10px;}
+    .cert-use{text-align:center;font-size:12.5px;font-weight:700;color:#111;margin:0 0 22px;}
+    .cert-date{text-align:center;margin:0 0 30px;}
+    .cert-date .cert-input{max-width:220px;background:#fff7f2;}
+    .cert-sign{text-align:right;}
+    .cert-sign-name{font-size:13px;color:#111;margin-bottom:8px;}
+    .cert-sign-line{font-size:13px;color:#111;display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;}
+    .cert-rep{white-space:nowrap;}
+    .cert-in{white-space:nowrap;}
+    .cert-sig{position:relative;display:inline-block;border:1.5px dashed #FB6220;border-radius:6px;background:rgba(251,98,32,.05);width:140px;flex:0 0 auto;}
+    .cert-sig canvas{display:block;width:100%;height:auto;aspect-ratio:380/112;touch-action:none;}
+    .cert-sig .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e0a077;font-size:11px;pointer-events:none;}
   </style>
 
   <script>
@@ -253,21 +277,29 @@
         + '</span>'
         + '</div>';
     }
+    // 재직 증명서: 증명서 형태(격자 없음) — 생년월일·재직기간·발급일은 문서 안에서 입력, (인) 자리에 서명
+    function row(label, valueHtml){
+      return '<div class="cert-row"><span class="cl">'+label+'</span><span class="cc">:</span><span class="cv">'+valueHtml+'</span></div>';
+    }
     function employmentDoc(){
-      return '<div class="doc-paper">'
-        + '<div class="doc-title-c">재 직 증 명 서</div><div class="doc-rule"></div>'
-        + '<table class="doc-table">'
-        + '<tr><th>성 명</th><td>'+esc(v('owner_name'))+'</td></tr>'
-        + '<tr><th>생년월일</th><td><input class="doc-inline" id="f-birth" placeholder="예: 1985. 03. 12"></td></tr>'
-        + '<tr><th>직 위</th><td>'+esc(v('contact_title'))+'</td></tr>'
-        + '<tr><th>재직 기간</th><td><input class="doc-inline" id="f-period" placeholder="예: 2020.01.01 ~ 현재"></td></tr>'
-        + '<tr><th>소속(상호명)</th><td>'+esc(v('name'))+'</td></tr>'
-        + '<tr><th>사업자등록번호</th><td>'+esc(v('biz_reg_no'))+'</td></tr>'
-        + '</table>'
-        + '<p class="center">위 사람은 상기 사업장에 재직하고 있음을 증명합니다.</p>'
-        + '<p class="center"><b>용도 : NHN Cloud 발신번호 등록 심사 제출용</b></p>'
-        + '<p class="center"><input class="doc-inline" id="f-issue" value="'+esc(todayKo())+'" style="text-align:center;min-width:200px;"></p>'
-        + '<div class="sign-line">대표자 : '+esc(v('owner_name'))+' &nbsp;'+signSlot()+' (인)</div>'
+      return '<div class="cert">'
+        + '<div class="cert-title">재 직 증 명 서</div><div class="cert-rule"></div>'
+        + '<div class="cert-rows">'
+        +   row('성 명', esc(v('owner_name')))
+        +   row('생년월일', '<input class="cert-input" id="f-birth" placeholder="예: 1985. 03. 12">')
+        +   row('직 위', esc(v('contact_title')))
+        +   row('재직 기간', '<input class="cert-input" id="f-period" placeholder="예: 2020.01.01 ~ 현재">')
+        +   row('소속(상호명)', esc(v('name')))
+        +   row('사업자등록번호', esc(v('biz_reg_no')))
+        + '</div>'
+        + '<p class="cert-stmt">위 사람은 위와 같이 본 사업장에 재직하고 있음을 증명합니다.</p>'
+        + '<p class="cert-use">용도 : NHN Cloud 발신번호 등록 심사 제출용</p>'
+        + '<p class="cert-date"><input class="cert-input" id="f-issue" value="'+esc(todayKo())+'" style="text-align:center;"></p>'
+        + '<div class="cert-sign">'
+        +   '<div class="cert-sign-name">상호명 : '+esc(v('name'))+'</div>'
+        +   '<div class="cert-sign-line"><span class="cert-rep">대표자 : '+esc(v('owner_name'))+'</span>'
+        +     '<span class="cert-sig"><canvas id="signPad" width="380" height="112"></canvas><span class="ph">여기에 서명</span></span><span class="cert-in">(인)</span></div>'
+        + '</div>'
         + '</div>';
     }
 
