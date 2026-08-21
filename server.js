@@ -24,6 +24,7 @@ const {
   userStats
 } = require('./db');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
+const { fetchShopBySeq, searchShops } = require('./catchtableAdmin');
 const { generateConsentDoc, generateEmploymentCert } = require('./docGenerator');
 const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
@@ -311,6 +312,7 @@ app.get('/admin', (req, res) => {
     stores,
     docTypes: DOC_TYPES,
     createdLink: req.query.created || null,
+    linkError: req.query.linkError || null,
     currentUser: req.user,
     lastActor: lastActorByStore()
   });
@@ -333,17 +335,50 @@ app.get('/admin/members', (req, res) => {
 
 // 매장별 업로드 링크 발급/재발급. storeId가 오면 기존 매장에 새 토큰만 발급하고,
 // 없으면 새 매장을 만들고 링크를 발급합니다.
-app.post('/admin/create-link', (req, res) => {
-  const { name, storeId: existingId } = req.body;
+// 매장명/시퀀스로 매장 검색(콤보박스 자동완성용). 브라우저 대신 서버가 내부 API를 호출·캐시한다.
+app.get('/admin/shop-lookup', async (req, res) => {
+  const q = (req.query.q || req.query.seq || '').trim();
+  if (!q) return res.json({ ok: true, items: [] });
+  const items = [];
+  // 숫자면 시퀀스 직접 조회(전체목록 캐시와 무관하게 항상 동작)
+  if (/^\d+$/.test(q)) {
+    try {
+      const s = await fetchShopBySeq(q);
+      items.push({ id: s.id, name: s.name });
+    } catch (_) { /* 없으면 무시하고 이름검색으로 */ }
+  }
+  // 이름/부분검색(전체목록 캐시)
+  try {
+    const more = await searchShops(q, 20);
+    for (const m of more) {
+      if (!items.find((x) => String(x.id) === String(m.id))) items.push(m);
+    }
+  } catch (_) { /* 목록 조회 실패 시 시퀀스 결과만 반환 */ }
+  res.json({ ok: true, items: items.slice(0, 20) });
+});
+
+app.post('/admin/create-link', async (req, res) => {
+  const { name, shop_seq, storeId: existingId } = req.body;
   let storeId = existingId;
 
   if (storeId) {
     if (!getStore(storeId)) return res.status(404).send('매장을 찾을 수 없습니다.');
   } else {
+    let shopName = (name || '').trim();
+    const seq = (shop_seq || '').trim();
+    // 시퀀스넘버가 있으면 캐치테이블 어드민 API로 매장명을 자동 조회
+    if (seq) {
+      try {
+        const shop = await fetchShopBySeq(seq);
+        shopName = shop.name;
+      } catch (e) {
+        return res.redirect('/admin?linkError=' + encodeURIComponent(e.message));
+      }
+    }
     storeId = nanoid(8);
     upsertStore({
       id: storeId,
-      name: name || '매장명 미입력',
+      name: shopName || '매장명 미입력',
       owner_name: '',
       biz_reg_no: '',
       contact_name: '',

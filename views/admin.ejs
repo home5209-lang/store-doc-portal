@@ -39,16 +39,105 @@
     <div class="card" style="margin-bottom:16px;">
       <p class="eyebrow">업로드 링크 발급</p>
       <h1 class="title" style="font-size:19px;">매장별 진행 현황</h1>
-      <p class="lead">캐치테이블 어드민 기준 매장명을 입력해 만료되는 업로드 링크를 발급하세요.</p>
+      <p class="lead">매장 시퀀스넘버를 입력하면 캐치테이블 어드민에서 매장을 찾아줍니다. 목록에서 매장을 선택한 뒤 링크를 발급하세요.</p>
 
       <% if (createdLink) { %>
         <div class="banner" style="margin-top:16px;">🔗 새 업로드 링크: <%= createdLink %></div>
       <% } %>
+      <% if (typeof linkError !== 'undefined' && linkError) { %>
+        <div class="alert alert-error" style="margin-top:16px;"><%= linkError %></div>
+      <% } %>
 
-      <form class="inline-form" method="POST" action="/admin/create-link" style="margin-top:14px;">
-        <input class="input" type="text" name="name" placeholder="매장명 (캐치테이블 어드민 기준)" />
-        <button class="btn btn-primary" type="submit">링크 발급</button>
+      <div class="combo" style="max-width:380px;margin-top:14px;">
+        <input id="shopSearch" class="input" autocomplete="off" placeholder="매장명 또는 시퀀스넘버 검색 (예: 시온 / 43251)" />
+        <div id="shopResults" class="combo-list" style="display:none;"></div>
+      </div>
+
+      <form id="createForm" method="POST" action="/admin/create-link" style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <input type="hidden" name="shop_seq" id="selSeq" />
+        <span id="selLabel" style="font-size:13px;color:var(--muted);">위에서 매장을 검색해 선택하세요.</span>
+        <button class="btn btn-primary" type="submit" id="createBtn" disabled>링크 발급</button>
       </form>
+
+      <details style="margin-top:10px;">
+        <summary style="font-size:12.5px;color:var(--muted);cursor:pointer;">시퀀스넘버가 없거나 조회가 안 될 때 — 매장명 직접 입력</summary>
+        <form class="inline-form" method="POST" action="/admin/create-link" style="margin-top:8px;">
+          <input class="input" type="text" name="name" placeholder="매장명 (캐치테이블 어드민 기준)" />
+          <button class="btn btn-ghost" type="submit">직접 입력으로 발급</button>
+        </form>
+      </details>
+
+      <style>
+        .combo{position:relative;}
+        .combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);z-index:20;overflow:hidden;}
+        .combo-item{padding:11px 14px;font-size:13.5px;cursor:pointer;display:flex;align-items:center;gap:8px;}
+        .combo-item:hover,.combo-item.active{background:var(--brand-soft);}
+        .combo-item .seq{color:var(--muted);font-size:12px;}
+        .combo-empty{padding:11px 14px;font-size:12.5px;color:var(--muted);}
+        .combo-picked{color:var(--text);font-weight:600;}
+      </style>
+      <script>
+        (function(){
+          var input=document.getElementById('shopSearch');
+          var list=document.getElementById('shopResults');
+          var selSeq=document.getElementById('selSeq');
+          var selLabel=document.getElementById('selLabel');
+          var btn=document.getElementById('createBtn');
+          var timer=null, lastQuery='';
+
+          function hide(){ list.style.display='none'; list.innerHTML=''; }
+          function clearSel(){ selSeq.value=''; btn.disabled=true; selLabel.textContent='위에서 매장을 검색해 선택하세요.'; selLabel.className=''; selLabel.style.color='var(--muted)'; }
+
+          function pick(id, name){
+            selSeq.value=id;
+            selLabel.textContent='선택됨: '+name+' ('+id+')';
+            selLabel.className='combo-picked'; selLabel.style.color='var(--text)';
+            btn.disabled=false;
+            input.value=name+' ('+id+')';
+            hide();
+          }
+
+          function render(items){
+            list.innerHTML='';
+            if(!items || !items.length){ list.innerHTML='<div class="combo-empty">일치하는 매장이 없습니다.</div>'; list.style.display='block'; return; }
+            items.forEach(function(it){
+              var d=document.createElement('div'); d.className='combo-item';
+              d.innerHTML='<span class="nm"></span> <span class="seq"></span>';
+              d.querySelector('.nm').textContent=it.name;
+              d.querySelector('.seq').textContent='('+it.id+')';
+              d.addEventListener('mousedown', function(e){ e.preventDefault(); pick(it.id, it.name); });
+              list.appendChild(d);
+            });
+            list.style.display='block';
+          }
+
+          function lookup(q){
+            list.innerHTML='<div class="combo-empty">검색 중…</div>'; list.style.display='block';
+            fetch('/admin/shop-lookup?q='+encodeURIComponent(q))
+              .then(function(r){return r.json();})
+              .then(function(res){
+                if(input.value.trim()!==q) return; // 입력이 바뀌었으면 무시
+                if(res.ok) render(res.items);
+                else { list.innerHTML='<div class="combo-empty">'+(res.error||'조회 실패')+'</div>'; list.style.display='block'; }
+              })
+              .catch(function(){ list.innerHTML='<div class="combo-empty">조회 중 오류가 발생했습니다.</div>'; list.style.display='block'; });
+          }
+
+          input.addEventListener('input', function(){
+            clearSel();
+            var q=input.value.trim();
+            if(timer) clearTimeout(timer);
+            if(q.length < 1){ hide(); return; }
+            timer=setTimeout(function(){ lookup(q); }, 300);
+          });
+          input.addEventListener('focus', function(){ if(list.innerHTML) list.style.display='block'; });
+          document.addEventListener('click', function(e){ if(!e.target.closest('.combo')) hide(); });
+
+          document.getElementById('createForm').addEventListener('submit', function(e){
+            if(!selSeq.value){ e.preventDefault(); alert('먼저 매장을 검색해 선택해주세요.'); }
+          });
+        })();
+      </script>
 
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
         <form method="POST" action="/admin/nhn-sync" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='조회 중…';">
