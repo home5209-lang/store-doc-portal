@@ -464,16 +464,25 @@ async function findContractCandidates(storeName, options = {}) {
 
   // (1) 서버 제목 검색 — 가장 긴(구별력 높은) 토큰으로 contains(title, ...) (전체 문서 대상)
   const longest = tokens.slice().sort((a, b) => b.length - a.length)[0] || storeName;
+  const errors = [];
+  let anyOk = false;
   try {
     (await searchCompletedDocumentsByTitle(longest, opts)).forEach(consider);
+    anyOk = true;
   } catch (e) {
-    /* 무시하고 (2)로 */
+    errors.push(e.message || String(e));
   }
   // (2) 최근 완료문서 병렬 스캔 — 서명자 매칭 포함
   try {
     (await scanRecentCompleted(opts)).forEach(consider);
+    anyOk = true;
   } catch (e) {
-    /* 무시 */
+    errors.push(e.message || String(e));
+  }
+
+  // 두 조회가 모두 실패(그리고 후보 0건)면 "못 찾음"이 아니라 실제 오류로 알린다.
+  if (!anyOk && byId.size === 0 && errors.length) {
+    throw new Error(errors[0]);
   }
 
   return [...byId.values()].sort(

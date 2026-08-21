@@ -393,17 +393,25 @@ app.post('/admin/create-link', async (req, res) => {
 });
 
 // 매장별 모두싸인 계약서 "후보" 목록 — 운영자가 직접 선택 (없으면 직접 업로드도 가능)
-app.get('/admin/contract-candidates/:storeId', async (req, res) => {
+// 페이지는 즉시 렌더하고(느린 모두싸인 조회를 기다리지 않음), 후보 목록은 아래 /data 에서 비동기로 불러온다.
+app.get('/admin/contract-candidates/:storeId', (req, res) => {
   const store = getStore(req.params.storeId);
   if (!store) return res.status(404).send('매장을 찾을 수 없습니다.');
-  // 기본 검색어는 매장명. 오타/표기 차이가 있으면 운영자가 q로 바꿔 다시 검색할 수 있다.
   const query = (req.query.q && req.query.q.trim()) || store.name;
   const current = getDocumentsForStore(store.id).find((d) => d.doc_type === DOC_TYPES.CONTRACT) || null;
+  res.render('contract-candidates', { store, query, current });
+});
+
+// 계약서 후보 목록(JSON) — 모두싸인 조회. 화면이 뜬 뒤 비동기로 호출된다.
+app.get('/admin/contract-candidates/:storeId/data', async (req, res) => {
+  const store = getStore(req.params.storeId);
+  if (!store) return res.json({ ok: false, error: '매장을 찾을 수 없습니다.' });
+  const query = (req.query.q && req.query.q.trim()) || store.name;
   try {
     const candidates = await findContractCandidates(query);
-    res.render('contract-candidates', { store, query, candidates, current, error: null });
+    res.json({ ok: true, candidates });
   } catch (err) {
-    res.render('contract-candidates', { store, query, candidates: [], current, error: err.message });
+    res.json({ ok: false, error: err.message });
   }
 });
 

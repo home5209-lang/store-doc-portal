@@ -28,34 +28,10 @@
       </form>
     </div>
 
-    <div style="margin-top:16px;">
-      <% if (error) { %>
-        <div class="alert alert-error">계약서 후보를 불러오지 못했습니다: <%= error %></div>
-      <% } %>
-
-      <% if (!error && candidates.length === 0) { %>
-        <div class="table-card"><div class="empty">"<%= query %>" 와(과) 매칭되는 서명 완료 계약서를 찾지 못했습니다.<br />위 검색창에서 매장명 표기를 바꿔 다시 검색해보세요.</div></div>
-      <% } %>
-
-      <% candidates.forEach(function (c) { %>
-        <div class="cand">
-          <div>
-            <p class="c-title"><%= c.title || '(제목 없음)' %><span class="score">유사도 <%= c.score.toFixed(3) %></span></p>
-            <div class="c-meta">
-              서명자: <%= (c.signers && c.signers.length) ? c.signers.join(', ') : '-' %><br />
-              <% if (c.createdAt) { %>생성: <%= c.createdAt %> · <% } %>매칭: <%= c.matchedField === 'title' ? '제목' : (c.matchedField === 'participant' ? '서명자' : '-') %>
-            </div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <a class="btn btn-ghost btn-sm" href="/admin/candidate-preview/<%= store.id %>/<%= c.documentId %>" target="_blank" rel="noopener">미리보기</a>
-            <form method="POST" action="/admin/attach-contract/<%= store.id %>">
-              <input type="hidden" name="documentId" value="<%= c.documentId %>" />
-              <input type="hidden" name="title" value="<%= c.title %>" />
-              <button type="submit" class="btn btn-primary btn-sm">이 계약서 첨부</button>
-            </form>
-          </div>
-        </div>
-      <% }) %>
+    <div id="candArea" style="margin-top:16px;">
+      <div class="table-card"><div class="empty" id="candLoading">
+        <span class="spin" aria-hidden="true"></span> 모두싸인에서 계약서를 불러오는 중…
+      </div></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -80,7 +56,54 @@
     </div>
   </div>
 
+  <style>
+    .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--border);border-top-color:var(--brand);border-radius:50%;vertical-align:-2px;margin-right:6px;animation:spin .8s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+  </style>
   <script>
+    (function () {
+      var STORE_ID = '<%= store.id %>';
+      var QUERY = <%- JSON.stringify(query) %>;
+      var area = document.getElementById('candArea');
+      function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+      function renderEmpty(){
+        area.innerHTML = '<div class="table-card"><div class="empty">"' + esc(QUERY) + '" 와(과) 매칭되는 서명 완료 계약서를 찾지 못했습니다.<br>위 검색창에서 매장명 표기를 바꿔 다시 검색해보세요.</div></div>';
+      }
+      function renderError(msg){
+        area.innerHTML = '<div class="alert alert-error">계약서 후보를 불러오지 못했습니다: ' + esc(msg) + '</div>';
+      }
+      function card(c){
+        var score = (typeof c.score === 'number') ? c.score.toFixed(3) : '-';
+        var signers = (c.signers && c.signers.length) ? c.signers.join(', ') : '-';
+        var matched = c.matchedField === 'title' ? '제목' : (c.matchedField === 'participant' ? '서명자' : '-');
+        var created = c.createdAt ? ('생성: ' + esc(c.createdAt) + ' · ') : '';
+        return '<div class="cand">'
+          + '<div>'
+          +   '<p class="c-title">' + esc(c.title || '(제목 없음)') + '<span class="score">유사도 ' + score + '</span></p>'
+          +   '<div class="c-meta">서명자: ' + esc(signers) + '<br>' + created + '매칭: ' + matched + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;align-items:center;">'
+          +   '<a class="btn btn-ghost btn-sm" href="/admin/candidate-preview/' + STORE_ID + '/' + encodeURIComponent(c.documentId) + '" target="_blank" rel="noopener">미리보기</a>'
+          +   '<form method="POST" action="/admin/attach-contract/' + STORE_ID + '">'
+          +     '<input type="hidden" name="documentId" value="' + esc(c.documentId) + '">'
+          +     '<input type="hidden" name="title" value="' + esc(c.title) + '">'
+          +     '<button type="submit" class="btn btn-primary btn-sm">이 계약서 첨부</button>'
+          +   '</form>'
+          + '</div>'
+          + '</div>';
+      }
+
+      fetch('/admin/contract-candidates/' + STORE_ID + '/data?q=' + encodeURIComponent(QUERY))
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) return renderError(res.error || '오류');
+          if (!res.candidates || !res.candidates.length) return renderEmpty();
+          area.innerHTML = res.candidates.map(card).join('');
+        })
+        .catch(function (e) { renderError(e.message); });
+    })();
+
     document.querySelectorAll('.up input[type=file]').forEach(function (input) {
       input.addEventListener('change', function () {
         var tile = input.closest('.up');
