@@ -92,65 +92,79 @@ async function generateConsentDoc(store, opts, outPath) {
 }
 
 // ---------- 2. 재직 증명서 ----------
+// 격자 표가 아니라 "증명서" 문서 형태: 외곽 테두리 + 큰 제목 + 밑줄식 인적사항 + 서술형 본문 + 하단 서명부.
 async function generateEmploymentCert(store, opts, outPath) {
   const { signature = null, birth = '', period = '', issueDate = '' } = opts || {};
 
   const buffer = await renderToBuffer((doc) => {
-    doc.font('krb').fontSize(22).text('재 직 증 명 서', { align: 'center' });
-    doc.moveDown(0.4);
-    // 제목 밑 가는 선
-    const lx = doc.page.margins.left;
-    const rw = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    doc.moveTo(lx, doc.y).lineTo(lx + rw, doc.y).lineWidth(1).strokeColor('#B0824A').stroke();
-    doc.strokeColor('black');
-    doc.moveDown(1.2);
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
 
-    // 표
+    // 외곽 이중 테두리 (증명서 느낌)
+    doc.lineWidth(2).strokeColor('#2B2B2B').rect(38, 40, pageW - 76, pageH - 80).stroke();
+    doc.lineWidth(0.7).strokeColor('#9A9A9A').rect(46, 48, pageW - 92, pageH - 96).stroke();
+    doc.strokeColor('black');
+
+    const left = 92;
+    const right = pageW - 92;
+    const innerW = right - left;
+
+    // 제목
+    doc.fillColor('#1B1B1B').font('krb').fontSize(30)
+      .text('재 직 증 명 서', left, 112, { width: innerW, align: 'center', characterSpacing: 4 });
+    // 제목 밑 금색 룰
+    doc.moveTo(left + 120, 172).lineTo(right - 120, 172).lineWidth(1.4).strokeColor('#B0824A').stroke();
+    doc.strokeColor('black').fillColor('#000');
+
+    // 인적사항 — 라벨 : 값 (밑줄식, 격자 없음)
     const rows = [
-      ['성 명', store.owner_name || ''],
-      ['생년월일', birth],
-      ['직 위', store.contact_title || '대표'],
-      ['재직 기간', period],
+      ['성       명', store.owner_name || ''],
+      ['생 년 월 일', birth],
+      ['직       위', store.contact_title || '대표'],
+      ['재 직 기 간', period],
       ['소속(상호명)', store.name || ''],
       ['사업자등록번호', store.biz_reg_no || '']
     ];
-    const tableX = lx;
-    const labelW = 130;
-    const valueW = rw - labelW;
-    const rowH = 30;
-    let ty = doc.y;
-    rows.forEach(([label, value]) => {
-      doc.rect(tableX, ty, labelW, rowH).fillAndStroke('#F3EFE7', '#333');
-      doc.rect(tableX + labelW, ty, valueW, rowH).fillAndStroke('#FFFFFF', '#333');
-      doc.fillColor('#000');
-      doc.font('krb').fontSize(11).text(label, tableX, ty + 9, { width: labelW, align: 'center' });
-      doc.font('kr').fontSize(11).text(value, tableX + labelW + 10, ty + 9, { width: valueW - 20 });
-      ty += rowH;
+    const labelX = left + 24;
+    const labelW = 150;
+    const valX = left + 190;
+    const valRight = right - 24;
+    let y = 224;
+    rows.forEach(([label, val]) => {
+      doc.font('krb').fontSize(12.5).fillColor('#3A3A3A').text(label, labelX, y, { width: labelW });
+      doc.font('krb').fontSize(12.5).fillColor('#3A3A3A').text(':', valX - 16, y);
+      doc.font('kr').fontSize(12.5).fillColor('#111').text(val || '', valX, y, { width: valRight - valX });
+      doc.moveTo(valX, y + 21).lineTo(valRight, y + 21).lineWidth(0.6).strokeColor('#CFC7BB').stroke();
+      y += 42;
     });
-    doc.y = ty + 24;
+    doc.strokeColor('black').fillColor('#000');
 
-    doc.font('kr').fontSize(12).text('위 사람은 상기 사업장에 재직하고 있음을 증명합니다.', { align: 'center' });
-    doc.moveDown(0.5);
-    doc.font('krb').fontSize(12).text('용도 : NHN Cloud 발신번호 등록 심사 제출용', { align: 'center' });
-    doc.moveDown(2);
-    doc.font('kr').fontSize(12).text(issueDate || ' ', { align: 'center' });
-    doc.moveDown(2.5);
+    // 서술형 본문
+    y += 26;
+    doc.font('kr').fontSize(13).fillColor('#111')
+      .text('위 사람은 위와 같이 본 사업장에 재직하고 있음을 증명합니다.', left, y, { width: innerW, align: 'center' });
+    y += 32;
+    doc.font('krb').fontSize(12.5)
+      .text('용도 : NHN Cloud 발신번호 등록 심사 제출용', left, y, { width: innerW, align: 'center' });
 
-    // 서명 줄 (우측): "대표자 : {owner}  [서명]  (인)"
+    // 발급일
+    y += 52;
+    doc.font('kr').fontSize(13).text(issueDate || ' ', left, y, { width: innerW, align: 'center' });
+
+    // 하단 서명부 (우측 정렬)
+    const sy = y + 64;
+    doc.font('kr').fontSize(13).fillColor('#111')
+      .text(`상호명 : ${store.name || ''}`, left, sy, { width: innerW, align: 'right' });
+
+    const line2Y = doc.y + 10;
     const owner = store.owner_name || '';
-    const lineY = doc.y;
-    const text = `상호명 : ${store.name || ''}`;
-    doc.font('kr').fontSize(12).text(text, lx, lineY, { width: rw, align: 'right' });
-    const line2Y = doc.y + 6;
-    const label = `대표자 : ${owner}    `;
-    // 오른쪽 정렬: 라벨 + (인) 을 오른쪽에 배치, 서명은 (인) 위에 겹쳐 얹음
-    doc.font('kr').fontSize(12);
-    const labelWidth = doc.widthOfString(label);
+    doc.font('kr').fontSize(13);
     const inW = doc.widthOfString('(인)');
-    const inX = lx + rw - inW;
-    const labelX = inX - labelWidth;
-    doc.text(label + '(인)', labelX, line2Y);
-    placeSignatureOver(doc, signature, inX + inW / 2, line2Y + 7, 90);
+    const inX = right - inW;
+    const full = `대표자 : ${owner}          (인)`;
+    doc.text(full, left, line2Y, { width: innerW, align: 'right' });
+    // 서명을 (인) 위에 겹쳐 얹음
+    placeSignatureOver(doc, signature, inX + inW / 2, line2Y + 8, 86);
   });
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
