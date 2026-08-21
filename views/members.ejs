@@ -27,7 +27,7 @@
       <% if (!stats || stats.length === 0) { %>
         <div class="empty">아직 기록된 활동이 없어요.</div>
       <% } else { %>
-        <table class="alog">
+        <table class="alog" id="memberTable">
           <thead>
             <tr>
               <th>담당자</th>
@@ -36,7 +36,7 @@
               <th>거부</th>
               <th>링크 발급</th>
               <th>최근 활동</th>
-              <th>히스토리</th>
+              <th>상세 보기</th>
             </tr>
           </thead>
           <tbody>
@@ -50,7 +50,10 @@
                 <td class="t"><%= u.last_at || '-' %></td>
                 <td>
                   <% if (u.email) { %>
-                    <a class="btn btn-ghost btn-sm" href="/admin/activity?user=<%= encodeURIComponent(u.email) %>">보기</a>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                      <a class="btn btn-primary btn-sm" href="/admin/members/<%= encodeURIComponent(u.email) %>">심사 매장</a>
+                      <a class="btn btn-ghost btn-sm" href="/admin/activity?user=<%= encodeURIComponent(u.email) %>">활동 로그</a>
+                    </div>
                   <% } else { %>-<% } %>
                 </td>
               </tr>

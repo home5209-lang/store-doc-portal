@@ -21,7 +21,9 @@ const {
   addAudit,
   listAudit,
   lastActorByStore,
-  userStats
+  userStats,
+  storesSubmittedByUser,
+  userNameByEmail
 } = require('./db');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { fetchShopBySeq, searchShops } = require('./catchtableAdmin');
@@ -331,6 +333,18 @@ app.get('/admin/activity', (req, res) => {
 // 담당자별 사용량 통계
 app.get('/admin/members', (req, res) => {
   res.render('members', { stats: userStats(), currentUser: req.user });
+});
+
+// 담당자 개인 상세 — 그 사람이 심사 요청한 매장들 + 현재 상태
+app.get('/admin/members/:email', (req, res) => {
+  const email = req.params.email;
+  const stores = storesSubmittedByUser(email);
+  res.render('member-detail', {
+    email,
+    name: userNameByEmail(email),
+    stores,
+    currentUser: req.user
+  });
 });
 
 // 매장별 업로드 링크 발급/재발급. storeId가 오면 기존 매장에 새 토큰만 발급하고,
