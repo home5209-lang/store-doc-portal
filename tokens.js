@@ -7,7 +7,7 @@ if (!process.env.LINK_SECRET) {
   );
 }
 
-const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7일
+const DEFAULT_TTL_MS = 3 * 24 * 60 * 60 * 1000; // 3일
 
 function sign(storeId, exp) {
   return crypto.createHmac('sha256', SECRET).update(`${storeId}.${exp}`).digest('base64url');
