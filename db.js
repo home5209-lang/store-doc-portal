@@ -229,6 +229,37 @@ function userStats() {
     .sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || '')));
 }
 
+// 특정 담당자가 "NHN 심사 요청(제출)"한 매장 목록 + 현재 상태.
+//  - 매장별 최신 제출 감사행의 담당자가 이 사람인 매장만 (userStats 귀속 로직과 동일)
+function storesSubmittedByUser(email) {
+  return db
+    .prepare(
+      `SELECT s.id, s.name, s.phone_numbers, s.nhn_status, s.nhn_reject_reason,
+              s.nhn_checked_at, s.submitted_at, sub.submitted_log_at
+       FROM (
+         SELECT a.store_id, COALESCE(a.user_email,'') AS email, a.created_at AS submitted_log_at
+         FROM audit_log a
+         JOIN (SELECT store_id, MAX(id) AS mid
+               FROM audit_log
+               WHERE action LIKE 'NHN 등록 신청%' AND store_id IS NOT NULL
+               GROUP BY store_id) m
+           ON a.id = m.mid
+       ) sub
+       JOIN stores s ON s.id = sub.store_id
+       WHERE sub.email = ?
+       ORDER BY sub.submitted_log_at DESC`
+    )
+    .all(email || '');
+}
+
+// 담당자 표시 이름 조회 (감사로그 기준)
+function userNameByEmail(email) {
+  const row = db
+    .prepare(`SELECT MAX(user_name) AS name FROM audit_log WHERE COALESCE(user_email,'') = ?`)
+    .get(email || '');
+  return (row && row.name) || email || '(미상)';
+}
+
 // 매장별 "마지막 담당자" 맵 { storeId: {user_name, user_email, action, created_at} }
 function lastActorByStore() {
   const rows = db
@@ -262,5 +293,7 @@ module.exports = {
   addAudit,
   listAudit,
   lastActorByStore,
-  userStats
+  userStats,
+  storesSubmittedByUser,
+  userNameByEmail
 };

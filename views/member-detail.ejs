@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<%- include('partials/head', { title: (name || '담당자') + ' - 처리 매장' }) %>
+</head>
+<body>
+  <div class="wrap-wide">
+    <div class="brand">
+      <span class="dot">C</span>
+      <span class="name">발신 번호 등록 관리자</span>
+      <span class="sub">발신번호 등록 · 관리자</span>
+      <span class="userbar">
+        <span class="who"><%= currentUser ? currentUser.name : '' %></span>
+        <a class="btn btn-ghost btn-sm" href="/admin/members">← 담당자별 통계</a>
+        <a class="btn btn-ghost btn-sm" href="/admin">대시보드</a>
+        <a class="btn btn-ghost btn-sm" href="/auth/logout">로그아웃</a>
+      </span>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <p class="eyebrow">담당자 처리 매장</p>
+      <h1 class="title" style="font-size:19px;"><%= name %> 님이 심사 요청한 매장</h1>
+      <p class="lead">
+        <%= email %> · 총 <%= stores.length %>개 매장
+        <a href="/admin/activity?user=<%= encodeURIComponent(email) %>" style="margin-left:8px;">활동 로그 보기 →</a>
+      </p>
+    </div>
+
+    <div class="table-card">
+      <% if (!stores || stores.length === 0) { %>
+        <div class="empty"><%= name %> 님이 NHN에 심사 요청한 매장이 아직 없어요.</div>
+      <% } else { %>
+        <table class="alog">
+          <thead>
+            <tr>
+              <th>매장명</th>
+              <th>발신번호</th>
+              <th>심사 상태</th>
+              <th>최근 조회</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% stores.forEach(function (s) { %>
+              <tr>
+                <td class="u"><%= s.name %></td>
+                <td style="color:var(--muted);"><%= s.phone_numbers || '-' %></td>
+                <td>
+                  <% if (s.nhn_status === 'registered') { %>
+                    <span class="nhn-stat done"><span class="dot"></span>등록완료</span>
+                  <% } else if (s.nhn_status === 'rejected') { %>
+                    <span class="nhn-stat rejected"><span class="dot"></span>거부</span>
+                    <% if (s.nhn_reject_reason) { %><span class="reject-reason">사유: <%= s.nhn_reject_reason %></span><% } %>
+                  <% } else if (s.nhn_status === 'requested') { %>
+                    <span class="nhn-stat review"><span class="dot"></span>심사중</span>
+                  <% } else { %>
+                    <span class="badge gray">상태 없음</span>
+                  <% } %>
+                </td>
+                <td class="t"><%= s.nhn_checked_at || '-' %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>
