@@ -67,6 +67,18 @@ try {
 } catch (e) {
   /* 이미 존재하면 무시 */
 }
+// 승인(등록완료) 문자 발송 시각 — 중복 발송 방지용
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN approve_notified_at TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
+// 승인 안내 문자를 받을 연락처(매장이 업로드 시 입력)
+try {
+  db.exec('ALTER TABLE stores ADD COLUMN contact_phone TEXT');
+} catch (e) {
+  /* 이미 존재하면 무시 */
+}
 
 // 문서 종류는 코드 전체에서 이 5가지 키로 통일해서 다룬다
 const DOC_TYPES = {
@@ -80,14 +92,14 @@ const DOC_TYPES = {
 function upsertStore(store) {
   const existing = db.prepare('SELECT id FROM stores WHERE id = ?').get(store.id);
   if (existing) {
-    // phone_numbers가 넘어오지 않으면(undefined) 기존 값 보존 (COALESCE)
+    // 넘어오지 않으면(undefined) 기존 값 보존 (COALESCE)
     db.prepare(
-      `UPDATE stores SET name=?, owner_name=?, biz_reg_no=?, contact_name=?, contact_title=?, phone_numbers=COALESCE(?, phone_numbers) WHERE id=?`
-    ).run(store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null, store.id);
+      `UPDATE stores SET name=?, owner_name=?, biz_reg_no=?, contact_name=?, contact_title=?, phone_numbers=COALESCE(?, phone_numbers), contact_phone=COALESCE(?, contact_phone) WHERE id=?`
+    ).run(store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null, store.contact_phone ?? null, store.id);
   } else {
     db.prepare(
-      `INSERT INTO stores (id, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers) VALUES (?,?,?,?,?,?,?)`
-    ).run(store.id, store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null);
+      `INSERT INTO stores (id, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers, contact_phone) VALUES (?,?,?,?,?,?,?,?)`
+    ).run(store.id, store.name, store.owner_name, store.biz_reg_no, store.contact_name, store.contact_title, store.phone_numbers ?? null, store.contact_phone ?? null);
   }
 }
 
@@ -229,6 +241,24 @@ function userStats() {
     .sort((a, b) => String(b.last_at || '').localeCompare(String(a.last_at || '')));
 }
 
+// 승인 문자 발송 완료 표시 (중복 방지)
+function markApproveNotified(storeId) {
+  db.prepare(`UPDATE stores SET approve_notified_at=datetime('now') WHERE id=?`).run(storeId);
+}
+
+// 이 매장을 마지막으로 NHN에 제출한 담당자 이메일
+function submitterEmailForStore(storeId) {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(user_email,'') AS email
+       FROM audit_log
+       WHERE store_id = ? AND action LIKE 'NHN 등록 신청%'
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(storeId);
+  return row ? row.email : '';
+}
+
 // 특정 담당자가 "NHN 심사 요청(제출)"한 매장 목록 + 현재 상태.
 //  - 매장별 최신 제출 감사행의 담당자가 이 사람인 매장만 (userStats 귀속 로직과 동일)
 function storesSubmittedByUser(email) {
@@ -295,5 +325,7 @@ module.exports = {
   lastActorByStore,
   userStats,
   storesSubmittedByUser,
-  userNameByEmail
+  userNameByEmail,
+  markApproveNotified,
+  submitterEmailForStore
 };

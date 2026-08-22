@@ -58,6 +58,12 @@
           <div class="hint">재직증명서에 대표자 직위로 기재됩니다. (모든 서류의 인적사항은 사업자등록증과 동일해야 합니다.)</div>
         </div>
 
+        <div class="field">
+          <label>연락처 휴대폰 <span class="req">*</span></label>
+          <input class="input" type="tel" name="contact_phone" value="<%= store.contact_phone || '' %>" placeholder="예: 010-1234-5678" required />
+          <div class="hint">발신번호 등록이 <b>승인 완료되면 이 번호로 안내 문자</b>를 보내드립니다.</div>
+        </div>
+
         <hr class="divider" />
 
         <div class="count-callout">
@@ -320,8 +326,8 @@
     var overlay=document.getElementById('signOverlay'), docBox=document.getElementById('signDoc'), titleEl=document.getElementById('signTitle');
     var currentKind=null;
     function openSign(kind){
-      var need=['name','owner_name','biz_reg_no','phone_numbers','contact_title'];
-      for(var i=0;i<need.length;i++){ if(!v(need[i])){ alert('먼저 위의 매장 정보(매장명·대표자명·사업자등록번호·발신번호·직위)를 모두 입력해주세요.'); return; } }
+      var need=['name','owner_name','biz_reg_no','phone_numbers','contact_title','contact_phone'];
+      for(var i=0;i<need.length;i++){ if(!v(need[i])){ alert('먼저 위의 매장 정보(매장명·대표자명·사업자등록번호·발신번호·직위·연락처)를 모두 입력해주세요.'); return; } }
       currentKind=kind;
       titleEl.textContent = kind==='consent' ? '사용 승낙서 서명' : '재직 증명서 작성·서명';
       docBox.innerHTML = kind==='consent' ? consentDoc() : employmentDoc();
@@ -338,7 +344,7 @@
     document.getElementById('signSubmit').addEventListener('click', function(){
       if(!hasInk){ alert('(인) 자리에 서명을 해주세요.'); return; }
       var payload = { name:v('name'), owner_name:v('owner_name'), biz_reg_no:v('biz_reg_no'),
-        phone_numbers:v('phone_numbers'), contact_title:v('contact_title'), signature: padCanvas.toDataURL('image/png') };
+        phone_numbers:v('phone_numbers'), contact_title:v('contact_title'), contact_phone:v('contact_phone'), signature: padCanvas.toDataURL('image/png') };
       if(currentKind==='employment'){
         var birth=(document.getElementById('f-birth')||{}).value||''; birth=birth.trim();
         var period=(document.getElementById('f-period')||{}).value||''; period=period.trim();
