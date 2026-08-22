@@ -23,8 +23,8 @@ function isConfigured() {
   return Boolean(clean(process.env.NHN_SMS_APPKEY) && clean(process.env.NHN_SMS_SECRETKEY) && digitsOnly(process.env.SMS_SENDER_NO));
 }
 
-// 문자 1건 발송. 반환: { ok, statusCode?, message? }
-async function sendSms(recipientNo, text) {
+// 문자 1건 발송. title이 있거나 본문이 길면 자동으로 LMS(장문)로 발송된다.
+async function sendSms(recipientNo, text, title) {
   const appKey = clean(process.env.NHN_SMS_APPKEY);
   const secret = clean(process.env.NHN_SMS_SECRETKEY);
   const sendNo = digitsOnly(process.env.SMS_SENDER_NO);
@@ -32,18 +32,30 @@ async function sendSms(recipientNo, text) {
   if (!appKey || !secret || !sendNo) throw new Error('.env 에 NHN_SMS_APPKEY / NHN_SMS_SECRETKEY / SMS_SENDER_NO 를 설정하세요.');
   if (!to) throw new Error('받는 번호가 올바르지 않습니다.');
 
-  const url = `${BASE}/${appKey}/sender/sms`;
+  // 제목이 있거나 본문이 길면 LMS로 보낸다. (엔드포인트: sms → mms/lms 겸용)
+  const isLms = Boolean(title) || Buffer.byteLength(String(text || ''), 'utf8') > 90;
+  const path = isLms ? 'mms' : 'sms';
+  const body = { body: String(text || ''), sendNo, recipientList: [{ recipientNo: to }] };
+  if (isLms && title) body.title = String(title);
+
+  const url = `${BASE}/${appKey}/sender/${path}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json;charset=UTF-8', 'X-Secret-Key': secret },
-    body: JSON.stringify({ body: String(text || ''), sendNo, recipientList: [{ recipientNo: to }] })
+    body: JSON.stringify(body)
   });
   const json = await res.json().catch(() => null);
   if (!json || !json.header || !json.header.isSuccessful) {
     const msg = (json && json.header && json.header.resultMessage) || `HTTP ${res.status}`;
     throw new Error(`NHN SMS 발송 오류: ${msg}`);
   }
-  return { ok: true };
+  return {
+    ok: true,
+    endpoint: path, // 'mms'(LMS/MMS) | 'sms'
+    isLms,
+    titleBytes: Buffer.byteLength(String(title || ''), 'utf8'),
+    bodyBytes: Buffer.byteLength(String(text || ''), 'utf8')
+  };
 }
 
 module.exports = { isConfigured, sendSms, digitsOnly };
