@@ -11,6 +11,7 @@
       <span class="sub" style="display:flex;align-items:center;gap:10px;">
         발신번호 등록 · 관리자
         <button type="button" class="btn btn-ghost btn-sm" onclick="openGuide()">❔ 사용 가이드</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="openReject()">⚠ 반려 사유 안내</button>
       </span>
       <span class="userbar">
         <% if (typeof currentUser !== 'undefined' && currentUser) { %>
@@ -270,11 +271,74 @@
 
   <%- include('partials/guide') %>
 
+  <!-- NHN 반려 사유 안내 -->
+  <div class="modal-overlay" id="reject-guide">
+    <div class="modal wide" role="dialog" aria-modal="true" aria-label="NHN 반려 사유 안내">
+      <div class="mhead">
+        <div>
+          <div class="mt">⚠ NHN 반려 사유 안내</div>
+          <div class="msub">NHN에서 제공한 심사 반려 기준입니다. 매장에 안내하거나 제출 전 확인하세요.</div>
+        </div>
+        <button class="mclose" type="button" onclick="closeReject()" aria-label="닫기">✕</button>
+      </div>
+      <div class="mbody">
+        <div class="rej-block rej-common">
+          <div class="rej-h">📌 공통 (모든 서류)</div>
+          <ul>
+            <li><b>발급 3개월 이내</b> — 관계확인증명서·사업자등록증을 제외한 모든 서류는 최근 3개월 이내 발급본이어야 합니다.</li>
+            <li><b>마스킹 금지</b> — 주민등록번호 뒷자리를 제외하고는 어떤 정보도 가리면(마스킹) 반려됩니다.</li>
+            <li><b>정보 일치</b> — 모든 서류의 상호명·대표자·사업자번호가 사업자등록증과 동일해야 합니다.</li>
+          </ul>
+        </div>
+        <div class="rej-block">
+          <div class="rej-h">📄 통신서비스 이용증명원</div>
+          <ul>
+            <li>발급자 정보·전화번호가 <b>없거나 마스킹</b>되어 있으면 반려됩니다.</li>
+            <li>신청한 <b>전화번호 목록과 모두 일치</b>해야 합니다.</li>
+          </ul>
+        </div>
+        <div class="rej-block">
+          <div class="rej-h">📄 사업자등록증</div>
+          <ul>
+            <li><b>주민등록번호 뒷자리만</b> 가리고, 나머지는 가리지 않고 제출합니다.</li>
+          </ul>
+        </div>
+        <div class="rej-block">
+          <div class="rej-h">📄 재직증명서</div>
+          <ul>
+            <li><b>주민등록번호 뒷자리가 노출</b>되면 반려됩니다. (본 툴 생성본은 주민번호를 넣지 않습니다)</li>
+          </ul>
+        </div>
+        <div class="rej-block">
+          <div class="rej-h">📄 관계확인증명서</div>
+          <ul>
+            <li>발신번호 명의자·계정 명의자 <b>양사 직인 날인</b>이 필수입니다.</li>
+          </ul>
+        </div>
+        <p class="rej-source">※ 위 기준은 NHN에서 제공한 심사 반려 기준입니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .rej-block{padding:12px 0;border-bottom:1px solid var(--border);}
+    .rej-block:last-child{border-bottom:none;}
+    .rej-block.rej-common{background:var(--warn-bg);border:1px solid #E7D6A6;border-radius:10px;padding:12px 14px;margin-bottom:6px;}
+    .rej-h{font-size:14px;font-weight:800;color:#1F1D1B;margin-bottom:7px;}
+    .rej-block ul{margin:0;padding-left:18px;}
+    .rej-block li{font-size:13px;color:#4A4844;line-height:1.65;margin-bottom:5px;}
+    .rej-block b{color:#B3261E;}
+    .rej-block.rej-common b{color:#7A5A12;}
+    .rej-source{font-size:12px;color:var(--muted);margin:14px 0 0;padding-top:10px;border-top:1px solid var(--border);}
+  </style>
+
   <script>
     function openDocs(id) { var o = document.getElementById('m-' + id); if (o) o.classList.add('open'); }
     function closeDocs(id) { var o = document.getElementById('m-' + id); if (o) o.classList.remove('open'); }
     function openGuide() { var o = document.getElementById('guide-modal'); if (o) o.classList.add('open'); }
     function closeGuide() { var o = document.getElementById('guide-modal'); if (o) o.classList.remove('open'); }
+    function openReject() { var o = document.getElementById('reject-guide'); if (o) o.classList.add('open'); }
+    function closeReject() { var o = document.getElementById('reject-guide'); if (o) o.classList.remove('open'); }
     document.querySelectorAll('.modal-overlay').forEach(function (o) {
       o.addEventListener('click', function (e) { if (e.target === o) o.classList.remove('open'); });
     });
