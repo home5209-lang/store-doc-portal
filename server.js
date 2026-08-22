@@ -23,7 +23,8 @@ const {
   lastActorByStore,
   userStats,
   storesSubmittedByUser,
-  userNameByEmail
+  userNameByEmail,
+  markApproveNotified
 } = require('./db');
 const { findContractCandidates, downloadSignedPdf } = require('./contractStub');
 const { fetchShopBySeq, searchShops } = require('./catchtableAdmin');
@@ -143,7 +144,8 @@ app.post('/upload/:storeId/:token/sign/:kind', async (req, res) => {
     biz_reg_no: b.biz_reg_no,
     contact_name: null,
     contact_title: b.contact_title,
-    phone_numbers: b.phone_numbers
+    phone_numbers: b.phone_numbers,
+    contact_phone: b.contact_phone
   });
   const store = getStore(storeId);
 
@@ -200,10 +202,10 @@ app.post(
       return res.status(check.reason === 'expired' ? 410 : 403).render('link-invalid', { reason: check.reason });
     }
 
-    const { name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers } = req.body;
+    const { name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers, contact_phone } = req.body;
 
     // 매장 정보 저장 (서명 단계에서도 저장되지만 최종값 반영)
-    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers });
+    upsertStore({ id: storeId, name, owner_name, biz_reg_no, contact_name, contact_title, phone_numbers, contact_phone });
     const store = getStore(storeId);
 
     // 검증: 파일 2종(통신증명원·사업자등록증) + 서명 2종(승낙서·재직증명서 — 앞서 작성·서명으로 첨부됨)
@@ -600,6 +602,28 @@ app.post('/admin/nhn-submit/:storeId', async (req, res) => {
 // NHN Cloud SMS API(sendNos)로 발신번호 상태를 조회한다. 로그인/브라우저 불필요.
 //   목록에 있음+blockYn!=Y → registered(승인) / 있음+blockYn=Y → rejected(거부)
 //   목록에 없음 → 알 수 없음(심사중 등) → 상태 변경하지 않음
+// 승인된 매장의 연락처(업로드 시 입력한 휴대폰)로 문자 발송
+async function notifyApproveSms(store, matchedPhone, log = console.log) {
+  const { isConfigured, sendSms } = require('./nhn/sendSms');
+  if (!isConfigured()) {
+    log(`[sms] 발송 설정(SMS_SENDER_NO 등) 없음 — ${store.name} 승인 문자 건너뜀`);
+    return;
+  }
+  const to = store.contact_phone;
+  if (!to) {
+    log(`[sms] ${store.name} 연락처(contact_phone)가 없어 승인 문자 건너뜀`);
+    return;
+  }
+  const text = `[발신번호 등록] ${store.name} 발신번호(${matchedPhone}) 등록이 완료(승인)되었습니다. 감사합니다.`;
+  try {
+    await sendSms(to, text);
+    markApproveNotified(store.id);
+    log(`[sms] ${store.name} 승인 문자 발송 → ${to}`);
+  } catch (e) {
+    log(`[sms] ${store.name} 승인 문자 발송 실패: ${e.message}`);
+  }
+}
+
 let nhnSyncRunning = false;
 async function runNhnSync(log = console.log) {
   if (nhnSyncRunning) {
@@ -656,6 +680,10 @@ async function runNhnSync(log = console.log) {
               ? `✅ [발신번호 승인/등록완료] ${store.name} · ${matchedPhone}`
               : `🔴 [발신번호 거부] ${store.name} · ${matchedPhone}${reason ? `\n사유: ${reason}` : ''}`;
           notifySlack(msg, log).catch(() => {});
+        }
+        // 승인(등록완료) 시, 그 매장을 제출한 담당자에게 문자 발송 (중복 방지: approve_notified_at)
+        if (statusChanged && newStatus === 'registered' && !store.approve_notified_at) {
+          notifyApproveSms(store, matchedPhone, log).catch(() => {});
         }
       }
     }
