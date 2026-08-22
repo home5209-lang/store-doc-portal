@@ -18,11 +18,14 @@ const { isConfigured, sendSms, digitsOnly } = require('./sendSms');
     console.error('.env 의 NHN_SMS_APPKEY / NHN_SMS_SECRETKEY / SMS_SENDER_NO 를 확인하세요.');
     process.exit(1);
   }
-  const title = '안녕하세요. 즐거운 미식생활의 시작. 캐치테이블 입니다 : )';
-  const text = '담당자님. 신청하신 발신번호 등록이 완료된 점 안내 드립니다.\n\n감사합니다.';
+  const title = '[캐치테이블] 발신번호 등록 완료 안내';
+  const text = '\n담당자님.\n신청하신 발신번호 등록이 완료되었습니다.\n이제 해당 번호로 메시지 발송이 가능합니다.\n\n감사합니다.';
   try {
-    await sendSms(to, text, title);
-    console.log('✅ 발송 요청 성공 →', to, '\n   휴대폰에서 수신 여부를 확인하세요. (수신까지 몇 초 걸릴 수 있음)');
+    const r = await sendSms(to, text, title);
+    console.log('✅ 발송 요청 성공 →', to);
+    console.log('   방식:', r.endpoint === 'mms' ? 'LMS/MMS(장문)' : 'SMS(단문)', '| 제목 바이트:', r.titleBytes, '(LMS 제목 한도 40)', '| 본문 바이트:', r.bodyBytes);
+    if (r.titleBytes > 40) console.log('   ⚠ 제목이 40바이트를 넘어 휴대폰에서 잘릴 수 있습니다.');
+    console.log('   휴대폰에서 수신 여부를 확인하세요. (수신까지 몇 초 걸릴 수 있음)');
   } catch (e) {
     console.error('❌ 발송 실패:', e.message);
     process.exit(1);

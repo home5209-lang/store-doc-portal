@@ -614,8 +614,8 @@ async function notifyApproveSms(store, matchedPhone, log = console.log) {
     log(`[sms] ${store.name} 연락처(contact_phone)가 없어 승인 문자 건너뜀`);
     return;
   }
-  const title = '안녕하세요. 즐거운 미식생활의 시작. 캐치테이블 입니다 : )';
-  const text = '담당자님. 신청하신 발신번호 등록이 완료된 점 안내 드립니다.\n\n감사합니다.';
+  const title = '[캐치테이블] 발신번호 등록 완료 안내';
+  const text = '\n담당자님.\n신청하신 발신번호 등록이 완료되었습니다.\n이제 해당 번호로 메시지 발송이 가능합니다.\n\n감사합니다.';
   try {
     await sendSms(to, text, title);
     markApproveNotified(store.id);

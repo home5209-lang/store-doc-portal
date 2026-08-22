@@ -49,7 +49,13 @@ async function sendSms(recipientNo, text, title) {
     const msg = (json && json.header && json.header.resultMessage) || `HTTP ${res.status}`;
     throw new Error(`NHN SMS 발송 오류: ${msg}`);
   }
-  return { ok: true };
+  return {
+    ok: true,
+    endpoint: path, // 'mms'(LMS/MMS) | 'sms'
+    isLms,
+    titleBytes: Buffer.byteLength(String(title || ''), 'utf8'),
+    bodyBytes: Buffer.byteLength(String(text || ''), 'utf8')
+  };
 }
 
 module.exports = { isConfigured, sendSms, digitsOnly };
