@@ -1,7 +1,11 @@
 const path = require('path');
+const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const db = new Database(path.join(__dirname, 'db', 'portal.db'));
+// db 폴더가 없으면 생성 (배포 번들·새 clone 등에서 폴더가 없을 때 대비)
+const DB_DIR = path.join(__dirname, 'db');
+fs.mkdirSync(DB_DIR, { recursive: true });
+const db = new Database(path.join(DB_DIR, 'portal.db'));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS stores (
