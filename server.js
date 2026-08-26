@@ -318,7 +318,8 @@ app.get('/admin', (req, res) => {
     createdLink: req.query.created || null,
     linkError: req.query.linkError || null,
     currentUser: req.user,
-    lastActor: lastActorByStore()
+    lastActor: lastActorByStore(),
+    nhnLoggedIn: hasSession()
   });
 });
 
