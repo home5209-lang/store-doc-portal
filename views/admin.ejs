@@ -37,6 +37,30 @@
       });
     %>
 
+    <% if (typeof nhnLoggedIn !== 'undefined' && !nhnLoggedIn) { %>
+      <div class="nhn-login-banner off">
+        <span class="ic">⚠</span>
+        <div>
+          <b>NHN에 로그인되어 있지 않습니다.</b>
+          <div class="sub">발신번호 등록 신청을 하려면 <b>로그인.bat</b>을 실행해 <b>본인 NHN 계정</b>으로 먼저 로그인해주세요.</div>
+        </div>
+      </div>
+    <% } else if (typeof nhnLoggedIn !== 'undefined') { %>
+      <div class="nhn-login-banner on">
+        <span class="ic">✓</span>
+        <div><b>NHN 로그인됨</b> <span class="sub">— 세션이 만료되면 로그인.bat으로 본인 계정 재로그인이 필요할 수 있어요.</span></div>
+      </div>
+    <% } %>
+
+    <style>
+      .nhn-login-banner{display:flex;align-items:flex-start;gap:10px;border-radius:12px;padding:12px 15px;margin-bottom:14px;font-size:13px;}
+      .nhn-login-banner .ic{font-size:15px;flex:0 0 auto;line-height:1.4;}
+      .nhn-login-banner .sub{color:var(--muted);font-size:12px;}
+      .nhn-login-banner.off{background:var(--brand-soft);border:1px solid #F3C2BE;color:#A3231C;}
+      .nhn-login-banner.off .sub{color:#8a4b45;}
+      .nhn-login-banner.on{background:var(--success-bg);border:1px solid #BFE3CF;color:#12543A;}
+    </style>
+
     <div class="card" style="margin-bottom:16px;">
       <p class="eyebrow">업로드 링크 발급</p>
       <h1 class="title" style="font-size:19px;">매장별 진행 현황</h1>
@@ -194,7 +218,11 @@
               <span class="nhn-stat done"><span class="dot"></span>등록완료</span>
             <% } else if (store.nhn_status === 'rejected') { %>
               <span class="nhn-stat rejected"><span class="dot"></span>거부</span>
-              <% if (store.nhn_reject_reason) { %><span class="reject-reason">사유: <%= store.nhn_reject_reason %></span><% } %>
+              <% if (store.nhn_reject_reason) { %>
+                <span class="reject-reason">사유: <%= store.nhn_reject_reason %></span>
+              <% } else { %>
+                <span class="reject-reason">반려되었습니다. NHN 콘솔·이메일에서 반려 사유를 확인 후 서류를 교체해 재신청해주세요.</span>
+              <% } %>
               <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
                 <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
               </form>
