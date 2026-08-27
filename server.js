@@ -338,7 +338,17 @@ app.get('/admin/members', (req, res) => {
   res.render('members', { stats: userStats(), currentUser: req.user });
 });
 
-// 담당자 개인 상세 — 그 사람이 심사 요청한 매장들 + 현재 상태
+// 담당자 상세(팝업용 JSON) — 심사 요청 매장 목록 / 활동 로그
+app.get('/admin/api/member-stores', (req, res) => {
+  const email = req.query.email || '';
+  res.json({ ok: true, name: userNameByEmail(email), stores: storesSubmittedByUser(email) });
+});
+app.get('/admin/api/member-activity', (req, res) => {
+  const email = req.query.email || '';
+  res.json({ ok: true, name: userNameByEmail(email), entries: listAudit(300, email) });
+});
+
+// 담당자 개인 상세 — 그 사람이 심사 요청한 매장들 + 현재 상태 (직접 접속용, 유지)
 app.get('/admin/members/:email', (req, res) => {
   const email = req.params.email;
   const stores = storesSubmittedByUser(email);
