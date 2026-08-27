@@ -765,4 +765,21 @@ app.listen(PORT, () => {
   } else if (syncEnabled && !nhnApiReady()) {
     console.log('NHN 자동 조회 대기: .env 에 NHN_SMS_APPKEY/SECRETKEY 넣고 재기동하면 켜집니다.');
   }
+
+  // 모두싸인 계약서 목록 캐시를 백그라운드로 미리 채운다(서명자 검색·오래된 문서용).
+  //  · 오픈 API가 서명자 검색을 지원하지 않아, 완료문서 전체를 받아 로컬에서 매칭한다.
+  //  · 첫 로딩은 문서가 많으면 시간이 걸리므로, 클릭을 막지 않게 백그라운드로 예열한다.
+  try {
+    const { warmContractCache, getModusignCredentials } = require('./contractStub');
+    const creds = getModusignCredentials();
+    if (creds && creds.email && creds.apiKey) {
+      console.log('모두싸인 계약서 목록 캐시 예열 시작(백그라운드)…');
+      warmContractCache()
+        .then(() => console.log('모두싸인 계약서 캐시 준비 완료'))
+        .catch(() => {});
+      setInterval(() => { warmContractCache(); }, 30 * 60 * 1000); // 30분마다 갱신
+    }
+  } catch (e) {
+    /* 모듈 로드 실패 시 무시 */
+  }
 });
