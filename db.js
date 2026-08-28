@@ -77,6 +77,16 @@ try {
 } catch (e) {
   /* 이미 존재하면 무시 */
 }
+// [마이그레이션] 예전 버전이 자동으로 '거부(rejected)'로 표기한 건(=사유 없음)을
+//   새 상태 '승인 미확인(unconfirmed)'으로 되돌린다. 실제 사유가 있는 거부(콘솔에서 확인)는 유지.
+try {
+  db.exec(
+    `UPDATE stores SET nhn_status='unconfirmed'
+     WHERE nhn_status='rejected' AND (nhn_reject_reason IS NULL OR nhn_reject_reason='')`
+  );
+} catch (e) {
+  /* 무시 */
+}
 // 승인 안내 문자를 받을 연락처(매장이 업로드 시 입력)
 try {
   db.exec('ALTER TABLE stores ADD COLUMN contact_phone TEXT');
@@ -144,6 +154,18 @@ function setNhnResult(storeId, status, reason) {
   db.prepare(
     `UPDATE stores SET nhn_status=?, nhn_reject_reason=?, nhn_checked_at=datetime('now') WHERE id=?`
   ).run(status, reason || null, storeId);
+}
+
+// 이 매장이 마지막으로 NHN에 등록 신청(심사 요청)한 시각. 활동 로그 기준. 없으면 null.
+// (미승인이 일정 시간 지나면 자동으로 '거부'로 판정할 때 경과 시간 계산에 사용)
+function nhnRequestedAt(storeId) {
+  const row = db
+    .prepare(
+      `SELECT MAX(created_at) AS at FROM audit_log
+       WHERE store_id = ? AND action LIKE 'NHN 등록 신청%'`
+    )
+    .get(storeId);
+  return (row && row.at) || null;
 }
 
 // 발신번호(숫자만)로 매장을 찾는다. phone_numbers에 여러 개가 쉼표 등으로 들어있을 수 있어
@@ -330,6 +352,7 @@ module.exports = {
   userStats,
   storesSubmittedByUser,
   userNameByEmail,
+  nhnRequestedAt,
   markApproveNotified,
   submitterEmailForStore
 };

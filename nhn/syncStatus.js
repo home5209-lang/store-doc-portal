@@ -23,12 +23,23 @@ function classifyStatus(text) {
   return null;
 }
 
-// 문자열에서 전화번호 후보(숫자 9~12자리, 0으로 시작)를 뽑아 숫자만 반환
+// 문자열에서 전화번호 후보를 뽑아 숫자만 반환.
+//  · 일반 유선/휴대폰: 0으로 시작하는 9~12자리 (02-xxxx-xxxx, 010-xxxx-xxxx 등)
+//  · 대표번호(전국대표번호): 15xx/16xx/18xx-XXXX 형식의 8자리 (예: 1644-6148)
+//    → 0으로 시작하지 않아 기존 로직에서 누락되던 케이스. 반드시 함께 인식해야 한다.
 function extractPhone(text) {
-  const m = String(text || '').match(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/);
+  const s = String(text || '');
+  // 1) 0으로 시작하는 일반 번호
+  let m = s.match(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/);
   if (m) return m[0].replace(/[^0-9]/g, '');
-  const digits = String(text || '').replace(/[^0-9]/g, '');
-  return /^0\d{8,11}$/.test(digits) ? digits : null;
+  // 2) 대표번호(15/16/18로 시작하는 8자리): 1644-6148, 16446148 모두 인식
+  m = s.match(/1[568]\d{2}[-\s]?\d{4}/);
+  if (m) return m[0].replace(/[^0-9]/g, '');
+  // 3) 폴백: 행 전체 숫자만 남겼을 때의 형태로 판정
+  const digits = s.replace(/[^0-9]/g, '');
+  if (/^0\d{8,11}$/.test(digits)) return digits;
+  if (/^1[568]\d{6}$/.test(digits)) return digits; // 대표번호 8자리
+  return null;
 }
 
 function shotDir() {
@@ -39,7 +50,7 @@ function shotDir() {
 // 발신번호 목록이 들어있는 콘솔 콘텐츠 iframe을 찾는다.
 // NHN 콘솔은 실제 화면을 교차출처 iframe(#productIframe, url에 sender-phone-number-verification
 // 또는 address-book 포함)에 담는다. 바깥 네비게이션 프레임이 아니라 이 안쪽 프레임을 잡아야 한다.
-async function findListFrame(page, log, timeoutMs = 25000) {
+async function findListFrame(page, log, timeoutMs = 40000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const frames = page.frames();
@@ -126,8 +137,9 @@ async function scrapeStatuses({ headless = true, log = console.log } = {}) {
   try {
     log('· NHN 콘솔 발신번호 목록으로 이동...');
     await page.goto(PROJECT_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {}); // SPA·iframe 로딩 대기
     const frame = await findListFrame(page, log);
-    await page.waitForTimeout(1200); // 표 렌더 대기
+    await page.waitForTimeout(1500); // 표 렌더 대기
 
     const rawRows = await readRows(frame);
     const results = [];
@@ -142,6 +154,7 @@ async function scrapeStatuses({ headless = true, log = console.log } = {}) {
         reason =
           raw
             .replace(/0\d{1,3}[-\s]?\d{3,4}[-\s]?\d{4}/g, '')
+            .replace(/1[568]\d{2}[-\s]?\d{4}/g, '') // 대표번호 제거
             .replace(/(반려|거부|거절|실패|반송)/g, '')
             .replace(/(사업자|법인|대표자|임직원|타사|타인)\s*(명의)?\s*번호/g, '')
             .replace(/\d{4}[-.]\d{2}[-.]\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/g, '') // 날짜/시각

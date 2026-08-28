@@ -18,6 +18,7 @@ const {
   setNhnStatus,
   setNhnResult,
   findStoreByPhone,
+  nhnRequestedAt,
   addAudit,
   listAudit,
   lastActorByStore,
@@ -33,6 +34,7 @@ const { generateUploadToken, verifyUploadToken } = require('./tokens');
 const googleAuth = require('./authGoogle');
 const { notifySlack } = require('./notify');
 const { withNhnLock, hasSession } = require('./nhn/session');
+const { businessDaysElapsed } = require('./nhn/bizdays');
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -637,6 +639,62 @@ async function notifyApproveSms(store, matchedPhone, log = console.log) {
 }
 
 let nhnSyncRunning = false;
+// 상태 갱신 + 알림(슬랙/문자)을 한곳에서 처리. API 조회·브라우저 스크래핑 양쪽이 공유한다.
+// 반환: 실제로 DB를 갱신했으면 true.
+function applyStatusUpdate(store, newStatus, reason, matchedPhone, log = console.log) {
+  const statusChanged = store.nhn_status !== newStatus;
+  if (!statusChanged && !(reason && store.nhn_reject_reason !== reason)) return false;
+  setNhnResult(store.id, newStatus, reason);
+  log(`[nhn-sync] ${store.name} (${matchedPhone}) → ${newStatus}${reason ? ' / ' + reason : ''}`);
+  if (statusChanged && (newStatus === 'registered' || newStatus === 'rejected')) {
+    const msg =
+      newStatus === 'registered'
+        ? `✅ [발신번호 승인/등록완료] ${store.name} · ${matchedPhone}`
+        : `🔴 [발신번호 거부] ${store.name} · ${matchedPhone}${reason ? `\n사유: ${reason}` : ''}`;
+    notifySlack(msg, log).catch(() => {});
+  }
+  // 승인(등록완료) 시, 그 매장을 제출한 담당자에게 문자 발송 (중복 방지: approve_notified_at)
+  if (statusChanged && newStatus === 'registered' && !store.approve_notified_at) {
+    notifyApproveSms(store, matchedPhone, log).catch(() => {});
+  }
+  return true;
+}
+
+// 브라우저 스크래핑 기반 동기화.
+//  · NHN sendNos API는 "승인된" 발신번호만 반환해 '거부'는 원리상 감지 불가.
+//  · 거부까지 반영하려면 콘솔의 "발신번호 사전등록" 목록 화면을 직접 읽어야 한다.
+//  · NHN 로그인(영속 프로필)이 있어야 동작. 없으면 명확한 안내와 함께 실패.
+let nhnScrapeRunning = false;
+async function runNhnScrapeSync(log = console.log) {
+  const { withNhnLock, hasSession } = require('./nhn/session');
+  if (!hasSession()) {
+    throw new Error('NHN 로그인 세션이 없습니다. 로그인.bat 을 실행해 본인 NHN 계정으로 먼저 로그인하세요.');
+  }
+  if (nhnScrapeRunning) {
+    log('[nhn-scrape] 이전 조회가 아직 진행 중 — 건너뜀');
+    return { skipped: true };
+  }
+  nhnScrapeRunning = true;
+  try {
+    const { scrapeStatuses } = require('./nhn/syncStatus');
+    const headless = String(process.env.NHN_HEADLESS || '') === '1';
+    // 제출 봇과 같은 프로필을 쓰므로 락으로 직렬화(동시에 브라우저 두 개 방지)
+    const results = await withNhnLock(() => scrapeStatuses({ headless, log }));
+    let matched = 0;
+    let updated = 0;
+    for (const r of results) {
+      const store = findStoreByPhone(r.phone);
+      if (!store) continue;
+      matched += 1;
+      if (applyStatusUpdate(store, r.status, r.reason, r.phone, log)) updated += 1;
+    }
+    log(`[nhn-scrape] 완료: ${results.length}행 읽음, ${matched}건 매칭, ${updated}건 갱신`);
+    return { ok: true, rows: results.length, matched, updated };
+  } finally {
+    nhnScrapeRunning = false;
+  }
+}
+
 async function runNhnSync(log = console.log) {
   if (nhnSyncRunning) {
     log('[nhn-sync] 이전 조회가 아직 진행 중 — 건너뜀');
@@ -678,26 +736,26 @@ async function runNhnSync(log = console.log) {
           break;
         }
       }
-      // 어느 번호도 목록에 없으면(심사중 등) 상태 변경하지 않음 — 승인/거부로만 갱신
-      if (!newStatus) continue;
-
-      const statusChanged = store.nhn_status !== newStatus;
-      if (statusChanged || (reason && store.nhn_reject_reason !== reason)) {
-        setNhnResult(store.id, newStatus, reason);
-        updated += 1;
-        log(`[nhn-sync] ${store.name} (${matchedPhone}) → ${newStatus}${reason ? ' / ' + reason : ''}`);
-        if (statusChanged && (newStatus === 'registered' || newStatus === 'rejected')) {
-          const msg =
-            newStatus === 'registered'
-              ? `✅ [발신번호 승인/등록완료] ${store.name} · ${matchedPhone}`
-              : `🔴 [발신번호 거부] ${store.name} · ${matchedPhone}${reason ? `\n사유: ${reason}` : ''}`;
-          notifySlack(msg, log).catch(() => {});
-        }
-        // 승인(등록완료) 시, 그 매장을 제출한 담당자에게 문자 발송 (중복 방지: approve_notified_at)
-        if (statusChanged && newStatus === 'registered' && !store.approve_notified_at) {
-          notifyApproveSms(store, matchedPhone, log).catch(() => {});
+      // API 목록에 승인으로 안 뜬 경우:
+      //   NHN 사전등록 반려는 API로 감지 불가(목록에서 빠짐) — 실측 확인됨.
+      //   그래서 "반려"로 단정하지 않고, 영업일이 충분히 지나도 승인이 확인되지 않으면
+      //   '승인 미확인(unconfirmed)' 으로 표기해 담당자가 직접 확인하도록 안내한다.
+      //   NHN은 주말·공휴일에 심사를 안 하므로 "영업일"로 계산.
+      //   (유예: NHN_UNCONFIRMED_AFTER_BIZDAYS 영업일, 기본 1 / 0이면 즉시)
+      if (!newStatus && store.nhn_status === 'requested') {
+        const graceDays = Math.max(0, parseInt(process.env.NHN_UNCONFIRMED_AFTER_BIZDAYS ?? '1', 10) || 0);
+        const reqAt = nhnRequestedAt(store.id); // 'YYYY-MM-DD HH:MM:SS' (로컬시각)
+        const reqDate = reqAt ? new Date(reqAt.replace(' ', 'T')) : null;
+        const elapsed = reqDate ? businessDaysElapsed(reqDate, new Date()) : Infinity;
+        if (elapsed >= graceDays) {
+          newStatus = 'unconfirmed';
+          reason = null;
+          matchedPhone = digitsList[0];
         }
       }
+      if (!newStatus) continue;
+
+      if (applyStatusUpdate(store, newStatus, reason, matchedPhone, log)) updated += 1;
     }
     log(`[nhn-sync] 완료: 번호 ${checked}건 조회, ${updated}건 갱신`);
     return { ok: true, checked, updated };
@@ -707,6 +765,7 @@ async function runNhnSync(log = console.log) {
 }
 
 // 수동 조회 (관리자 화면의 "상태 새로고침" 버튼)
+//  · API 방식 — 로그인/브라우저 불필요. 승인은 API로, 거부는 "미승인 유예 경과" 자동 판정.
 app.post('/admin/nhn-sync', async (req, res) => {
   try {
     await runNhnSync();
@@ -714,6 +773,19 @@ app.post('/admin/nhn-sync', async (req, res) => {
   } catch (e) {
     const hint = '\n\n.env 의 NHN_SMS_APPKEY / NHN_SMS_SECRETKEY 값을 확인하세요. (NHN 콘솔 → SMS → URL & Appkey)';
     res.status(500).send('NHN 상태 조회 실패: ' + e.message + hint);
+  }
+});
+
+// (선택) 정밀 조회 — NHN 콘솔 화면을 직접 읽어 거부 "사유"까지 가져온다. NHN 로그인 필요.
+//  자동거부(유예 판정)로 충분하면 안 써도 됨. 사유 원문이 필요할 때만 사용.
+app.post('/admin/nhn-scrape', async (req, res) => {
+  try {
+    await runNhnScrapeSync();
+    res.redirect('/admin');
+  } catch (e) {
+    const hint =
+      '\n\n이 기능은 NHN 로그인이 필요합니다. 로그인.bat 을 실행해 본인 NHN 계정으로 로그인한 뒤 다시 시도하세요.';
+    res.status(500).send('NHN 정밀 조회 실패: ' + e.message + hint);
   }
 });
 
