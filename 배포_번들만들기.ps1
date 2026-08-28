@@ -5,7 +5,8 @@
 #  It bundles: Node runtime, npm packages, and the automation browser.
 #
 #  Usage (run in the project folder):
-#     powershell -ExecutionPolicy Bypass -File .\배포_번들만들기.ps1
+#     powershell -ExecutionPolicy Bypass -File .\build-bundle.ps1
+#     (this file's actual name may be Korean; run it by its real name)
 #
 #  Note: run this on a PC where the app already works (node_modules installed).
 #  This script is ASCII-only on purpose (avoids Korean-encoding issues in PS 5.1).
@@ -22,11 +23,8 @@ if (-not (Test-Path ".\node_modules")) {
   Write-Host "node_modules not found. Run install first (npm install)." -ForegroundColor Red
   exit 1
 }
-if (-not (Test-Path ".\.env")) {
-  Write-Host "WARNING: .env not found. Without it, teammates cannot log in / query." -ForegroundColor Yellow
-  Write-Host "         Fill .env first, then re-run. (press any key to continue)" -ForegroundColor Yellow
-  [void][System.Console]::ReadKey($true)
-}
+# NOTE: .env (secrets) is intentionally NOT bundled. Deliver it to teammates separately.
+#       The bundle ships .env.example only. See message at the end.
 
 # 1) install automation browser INSIDE the project (so it is bundled)
 Write-Host "`n[1/5] Installing automation browser into project..." -ForegroundColor Green
@@ -54,8 +52,17 @@ New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $exclDirs = @("dist", ".git", "db", "generated", "uploads", "nhn\nhn-profile", "nhn\shots")
 $xd = @()
 foreach ($d in $exclDirs) { $xd += "/XD"; $xd += (Join-Path $root $d) }
-robocopy $root $dist /E /NFL /NDL /NJH /NJS /NP @xd | Out-Null
+# Exclude secrets / machine-local files. .env is delivered to teammates separately.
+$exclFiles = @(".env", "nhn-session.json", "*.sqlite", "*.db")
+$xf = @()
+foreach ($f in $exclFiles) { $xf += "/XF"; $xf += $f }
+robocopy $root $dist /E /NFL /NDL /NJH /NJS /NP @xd @xf | Out-Null
 Copy-Item $nodeExe.FullName -Destination (Join-Path $dist "node.exe") -Force
+
+# Safety net: make sure no real .env slipped into the bundle.
+$leaked = Join-Path $dist ".env"
+if (Test-Path $leaked) { Remove-Item $leaked -Force }
+Write-Host ("   .env in bundle? " + (Test-Path $leaked) + " (should be False)") -ForegroundColor Yellow
 
 # 4) create teammate launchers (use bundled node) - English content to avoid cmd encoding issues
 Write-Host "`n[4/5] Creating launchers..." -ForegroundColor Green
@@ -65,6 +72,15 @@ cd /d "%~dp0"
 title Sender-Number Admin (Server)
 set PLAYWRIGHT_BROWSERS_PATH=0
 set NHN_SUBMIT=1
+if not exist "%~dp0.env" (
+  echo ==========================================
+  echo  .env file is missing.
+  echo  Get the .env from your admin and put it in THIS folder
+  echo  (next to START.bat), then run START.bat again.
+  echo ==========================================
+  pause
+  exit /b
+)
 echo ==========================================
 echo  Sender-Number Admin : http://localhost:3000
 echo  Keep this window OPEN. Close it to stop.
@@ -103,4 +119,8 @@ Compress-Archive -Path "$dist\*" -DestinationPath $zip -Force
 
 Write-Host "`n== Done ==" -ForegroundColor Cyan
 Write-Host "Bundle zip: $zip" -ForegroundColor Green
-Write-Host "Teammates: unzip, then double-click START.bat  (NHN-LOGIN.bat before first NHN submit)." -ForegroundColor Green
+Write-Host "This bundle does NOT contain .env (secrets)." -ForegroundColor Yellow
+Write-Host "Deliver .env to teammates SEPARATELY (secure channel), and have them put it" -ForegroundColor Yellow
+Write-Host "next to START.bat before first run." -ForegroundColor Yellow
+Write-Host "Teammates: unzip -> put .env in the folder -> double-click START.bat" -ForegroundColor Green
+Write-Host "           (NHN-LOGIN.bat before first NHN submit)." -ForegroundColor Green
