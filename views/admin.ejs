@@ -29,10 +29,11 @@
       const docOf = (store, t) => store.documents.find(d => d.doc_type === t);
       const readyCount = (store) => types.filter(t => hasDoc(store, t)).length;
       const isReady = (store) => readyCount(store) === types.length;
-      const m = { total: stores.length, wait: 0, review: 0, done: 0 };
+      const m = { total: stores.length, wait: 0, review: 0, done: 0, unconfirmed: 0 };
       stores.forEach(s => {
         if (s.nhn_status === 'registered') m.done += 1;
         else if (s.nhn_status === 'requested') m.review += 1;
+        else if (s.nhn_status === 'unconfirmed') m.unconfirmed += 1;
         else if (!isReady(s)) m.wait += 1;
       });
     %>
@@ -168,6 +169,7 @@
       <div class="metric"><div class="k">전체 매장</div><div class="v"><%= m.total %></div></div>
       <div class="metric"><div class="k">서류 대기</div><div class="v warn"><%= m.wait %></div></div>
       <div class="metric"><div class="k">심사중</div><div class="v acc"><%= m.review %></div></div>
+      <div class="metric"><div class="k">승인 미확인</div><div class="v"><%= m.unconfirmed %></div></div>
       <div class="metric"><div class="k">등록완료</div><div class="v ok"><%= m.done %></div></div>
     </div>
 
@@ -182,6 +184,7 @@
         <button type="button" class="fchip" data-f="ready">신청 대기</button>
         <button type="button" class="fchip" data-f="review">심사중</button>
         <button type="button" class="fchip" data-f="done">등록완료</button>
+        <button type="button" class="fchip" data-f="unconfirmed">승인 미확인</button>
         <button type="button" class="fchip" data-f="rejected">거부</button>
       </div>
       <select id="storeSort" class="fsort">
@@ -196,6 +199,7 @@
            const count = readyCount(store);
            const st = store.nhn_status === 'registered' ? 'done'
              : store.nhn_status === 'rejected' ? 'rejected'
+             : store.nhn_status === 'unconfirmed' ? 'unconfirmed'
              : store.nhn_status === 'requested' ? 'review'
              : (ready ? 'ready' : 'wait');
       %>
@@ -223,6 +227,12 @@
               <% } else { %>
                 <span class="reject-reason">반려되었습니다. NHN 콘솔·이메일에서 반려 사유를 확인 후 서류를 교체해 재신청해주세요.</span>
               <% } %>
+              <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
+                <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
+              </form>
+            <% } else if (store.nhn_status === 'unconfirmed') { %>
+              <span class="nhn-stat unconfirmed"><span class="dot"></span>승인 미확인</span>
+              <span class="reject-reason">유예 기간이 지나도 승인이 확인되지 않았어요. NHN 콘솔·이메일에서 <b>직접 확인</b>해주세요. (반려됐다면 서류 교체 후 재신청)</span>
               <form method="POST" action="/admin/nhn-submit/<%= store.id %>" onsubmit="return confirm('서류를 다시 검토하셨나요? NHN에 재신청합니다.');">
                 <button type="submit" class="btn btn-ghost btn-sm">재신청</button>
               </form>
@@ -385,7 +395,7 @@
       var rows = Array.prototype.slice.call(list.querySelectorAll('.srow'));
       var origOrder = rows.slice();
       var curFilter = 'all';
-      var statusRank = { rejected: 0, review: 1, ready: 2, wait: 3, done: 4 };
+      var statusRank = { rejected: 0, unconfirmed: 1, review: 2, ready: 3, wait: 4, done: 5 };
 
       function apply() {
         var q = (search && search.value || '').trim().toLowerCase();

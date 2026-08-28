@@ -103,6 +103,7 @@
     .mm-badge.ok{background:#E4F5EC;color:#12543A;}
     .mm-badge.no{background:#FCE7E5;color:#A3231C;}
     .mm-badge.wait{background:#FFF3DC;color:#8a5a00;}
+    .mm-badge.unk{background:#EEF1F4;color:#3E4A59;}
     .mm-reason{color:#A3231C;font-size:12px;margin-top:3px;}
     .mm-muted{color:var(--muted,#999);}
   </style>
@@ -125,9 +126,10 @@
 
       function statusBadge(s){
         var t = (s || '').toString();
-        if (t === 'registered') return '<span class="mm-badge ok">등록완료</span>';
-        if (t === 'rejected')   return '<span class="mm-badge no">거부</span>';
-        if (t === 'requested')  return '<span class="mm-badge wait">심사중</span>';
+        if (t === 'registered')  return '<span class="mm-badge ok">등록완료</span>';
+        if (t === 'rejected')    return '<span class="mm-badge no">거부</span>';
+        if (t === 'unconfirmed') return '<span class="mm-badge unk">승인 미확인</span>';
+        if (t === 'requested')   return '<span class="mm-badge wait">심사중</span>';
         if (!t) return '<span class="mm-muted">미제출</span>';
         // 혹시 모를 기타 값은 한글이면 그대로, 아니면 그대로 표시
         if (t.indexOf('등록완료') >= 0 || t.indexOf('승인') >= 0) return '<span class="mm-badge ok">'+esc(t)+'</span>';
