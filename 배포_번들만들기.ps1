@@ -75,8 +75,8 @@ set NHN_SUBMIT=1
 if not exist "%~dp0.env" (
   echo ==========================================
   echo  .env file is missing.
-  echo  Get the .env from your admin and put it in THIS folder
-  echo  (next to START.bat), then run START.bat again.
+  echo  Get the .env from your admin and put it
+  echo  in THIS folder next to START.bat, then run again.
   echo ==========================================
   pause
   exit /b
