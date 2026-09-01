@@ -317,6 +317,7 @@ app.get('/admin', (req, res) => {
     ...s,
     documents: getDocumentsForStore(s.id)
   }));
+  const gmail = require('./nhn/gmailReject');
   res.render('admin', {
     stores,
     docTypes: DOC_TYPES,
@@ -324,7 +325,10 @@ app.get('/admin', (req, res) => {
     linkError: req.query.linkError || null,
     currentUser: req.user,
     lastActor: lastActorByStore(),
-    nhnLoggedIn: hasSession()
+    nhnLoggedIn: hasSession(),
+    gmailConfigured: gmail.isConfigured(),
+    gmailConnected: gmail.isConnected(),
+    gmailEmail: gmail.connectedEmail()
   });
 });
 
@@ -792,6 +796,86 @@ app.post('/admin/nhn-scrape', async (req, res) => {
   }
 });
 
+// ── 반려 메일(Gmail) 연동 ────────────────────────────────
+// NHN 반려 사유는 메일로만 오므로, 연동한 메일함에서 반려 메일을 읽어 "거부 + 사유"로 반영.
+
+// 반려 메일을 읽어 매장 상태를 갱신. dryRun=true면 DB에 쓰지 않고 결과만 반환(검증용).
+async function runRejectMailSync({ dryRun = false, log = console.log } = {}) {
+  const gmail = require('./nhn/gmailReject');
+  const { parseRejectEmail, matchStore } = require('./nhn/rejectMail');
+  if (!gmail.isConnected()) return { skipped: true, reason: 'not-connected' };
+
+  const mails = await gmail.fetchRejectMails({ newerThanDays: 60 });
+  const stores = listStores();
+  const results = [];
+  let updated = 0;
+  for (const mail of mails) {
+    const parsed = parseRejectEmail(mail);
+    if (!parsed.isReject) continue;
+    const m = matchStore(parsed, stores);
+    const row = {
+      subject: mail.subject,
+      maskedNumber: parsed.maskedNumber,
+      reason: parsed.reason,
+      matched: m ? m.store.name : null,
+      by: m ? m.by : null
+    };
+    results.push(row);
+    if (m && parsed.reason && !dryRun) {
+      if (applyStatusUpdate(m.store, 'rejected', parsed.reason, parsed.maskedNumber, log)) updated += 1;
+    }
+  }
+  log(`[reject-mail] 반려메일 ${results.length}건, 매칭 ${results.filter((r) => r.matched).length}건${dryRun ? ' (드라이런)' : `, 갱신 ${updated}건`}`);
+  return { ok: true, count: results.length, updated, results };
+}
+
+// Gmail 연동 시작 (관리자가 gmail.readonly 권한 허용)
+app.get('/admin/gmail/connect', (req, res) => {
+  const gmail = require('./nhn/gmailReject');
+  if (!gmail.isConfigured()) return res.status(400).send('GOOGLE_CLIENT_ID/SECRET 가 필요합니다.');
+  const crypto = require('crypto');
+  const state = crypto.randomBytes(16).toString('hex');
+  googleAuth.parseCookies(req); // noop (쿠키 유틸 로드)
+  res.setHeader('Set-Cookie', `sdp_gmail_state=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`);
+  res.redirect(gmail.getConnectUrl(state));
+});
+
+// Gmail 연동 콜백 → refresh token 저장
+app.get('/admin/gmail/callback', async (req, res) => {
+  const gmail = require('./nhn/gmailReject');
+  const { code, state } = req.query;
+  const cookieState = (googleAuth.parseCookies(req) || {})['sdp_gmail_state'];
+  if (!code || !state || state !== cookieState) {
+    return res.status(400).send('연동 검증 실패(state 불일치). 다시 시도해주세요.');
+  }
+  try {
+    const { email } = await gmail.exchangeAndStore(code);
+    res.redirect('/admin?gmail=connected&email=' + encodeURIComponent(email || ''));
+  } catch (e) {
+    res.status(500).send('Gmail 연동 실패: ' + e.message);
+  }
+});
+
+// 반려 메일 드라이런 — DB에 쓰지 않고 파싱·매칭 결과만 JSON으로 확인 (검증용)
+app.get('/admin/gmail/test', async (req, res) => {
+  try {
+    const out = await runRejectMailSync({ dryRun: true });
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 반려 메일 실제 반영 (버튼/수동)
+app.post('/admin/gmail/sync', async (req, res) => {
+  try {
+    await runRejectMailSync({ dryRun: false });
+    res.redirect('/admin');
+  } catch (e) {
+    res.status(500).send('반려 메일 동기화 실패: ' + e.message);
+  }
+});
+
 app.get('/admin/download/:storeId/:docId', (req, res) => {
   const docs = getDocumentsForStore(req.params.storeId);
   const doc = docs.find((d) => String(d.id) === req.params.docId);
@@ -844,7 +928,11 @@ app.listen(PORT, () => {
   if (syncEnabled && nhnApiReady()) {
     const minutes = Math.max(5, parseInt(process.env.NHN_SYNC_INTERVAL_MIN || '30', 10) || 30);
     console.log(`NHN 심사 상태 자동 조회(API): ${minutes}분마다 실행`);
-    const tick = () => runNhnSync().catch((e) => console.error('[nhn-sync] 오류:', e.message));
+    const tick = () => {
+      runNhnSync().catch((e) => console.error('[nhn-sync] 오류:', e.message));
+      // Gmail 연동돼 있으면 반려 메일도 함께 반영 (거부 + 사유)
+      runRejectMailSync({ dryRun: false }).catch((e) => console.error('[reject-mail] 오류:', e.message));
+    };
     setTimeout(tick, 5000); // 기동 5초 후 1회
     setInterval(tick, minutes * 60 * 1000);
   } else if (syncEnabled && !nhnApiReady()) {

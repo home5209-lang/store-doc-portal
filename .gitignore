@@ -7,6 +7,7 @@ generated/*
 !generated/.gitkeep
 nhn/nhn-session.json
 nhn/nhn-profile/
+nhn/gmail-token.json
 nhn/shots/
 reset-nhn.js
 dist/

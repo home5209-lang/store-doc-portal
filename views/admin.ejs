@@ -165,6 +165,22 @@
       </div>
     </div>
 
+    <% if (typeof gmailConfigured !== 'undefined' && gmailConfigured) { %>
+      <div class="nhn-login-banner <%= gmailConnected ? 'on' : 'off' %>" style="margin-top:-4px;">
+        <span class="ic"><%= gmailConnected ? '✓' : '✉' %></span>
+        <div style="flex:1;">
+          <% if (gmailConnected) { %>
+            <b>반려 메일 연동됨</b> <span class="sub">— <%= gmailEmail || '' %> 의 NHN 반려 메일을 읽어 "거부 + 사유"로 표시합니다.</span>
+          <% } else { %>
+            <b>반려 메일 미연동</b>
+            <div class="sub">반려 사유를 대시보드에 표시하려면, NHN 반려 메일이 오는 계정으로 <b>읽기 전용</b> 연동이 필요합니다.</div>
+          <% } %>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/admin/gmail/test" target="_blank">테스트(드라이런)</a>
+        <a class="btn <%= gmailConnected ? 'btn-ghost' : 'btn-primary' %> btn-sm" href="/admin/gmail/connect"><%= gmailConnected ? '재연동' : '반려 메일 연동' %></a>
+      </div>
+    <% } %>
+
     <div class="metrics">
       <div class="metric"><div class="k">전체 매장</div><div class="v"><%= m.total %></div></div>
       <div class="metric"><div class="k">서류 대기</div><div class="v warn"><%= m.wait %></div></div>
