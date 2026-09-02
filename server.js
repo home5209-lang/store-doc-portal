@@ -856,13 +856,35 @@ app.get('/admin/gmail/callback', async (req, res) => {
   }
 });
 
-// 반려 메일 드라이런 — DB에 쓰지 않고 파싱·매칭 결과만 JSON으로 확인 (검증용)
+// 반려 메일 드라이런 — DB에 쓰지 않고 파싱·매칭 결과만 확인 (검증용).
+//   브라우저면 보기 쉬운 표(HTML), 그 외(?format=json)면 JSON.
 app.get('/admin/gmail/test', async (req, res) => {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   try {
     const out = await runRejectMailSync({ dryRun: true });
-    res.json(out);
+    if (req.query.format === 'json') return res.json(out);
+    const rows = (out.results || [])
+      .map((r) => {
+        const ok = r.matched ? 'style="background:#E4F5EC;"' : 'style="background:#FCE7E5;"';
+        return `<tr ${ok}>
+          <td style="white-space:nowrap;font-weight:600;">${esc(r.maskedNumber)}</td>
+          <td style="white-space:nowrap;">${r.matched ? esc(r.matched) + ' <span style=\"color:#888\">(' + esc(r.by) + ')</span>' : '<b style=\"color:#A3231C\">매칭 안됨</b>'}</td>
+          <td>${esc(r.reason)}</td>
+        </tr>`;
+      })
+      .join('');
+    res.send(`<!doctype html><meta charset="utf-8"><title>반려 메일 드라이런</title>
+      <div style="font-family:system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;">
+        <h2>반려 메일 드라이런 (DB에 쓰지 않음)</h2>
+        <p>반려 메일 <b>${out.count || 0}</b>건 · 매칭 <b>${(out.results || []).filter((r) => r.matched).length}</b>건 · 매칭 안됨 <b>${(out.results || []).filter((r) => !r.matched).length}</b>건</p>
+        <p style="color:#888;font-size:13px;">초록=매칭됨 / 빨강=매칭 안됨. 각 행의 <b>번호·사유</b>와 <b>매칭 매장</b>이 맞는지 확인해주세요. (매칭 안됨 = 그 매장이 아직 DB에 없거나 애매해서 자동 반영 제외)</p>
+        <table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;font-size:13px;">
+          <thead style="background:#f4f4f4;"><tr><th>번호(마스킹)</th><th>매칭 매장(근거)</th><th>사유</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`);
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    res.status(500).send('반려 메일 조회 실패: ' + esc(e.message));
   }
 });
 
