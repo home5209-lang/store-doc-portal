@@ -192,7 +192,8 @@ async function fetchRejectMails({ newerThanDays = 60, max = 30 } = {}) {
       id,
       from: headerOf(payload, 'From'),
       subject: headerOf(payload, 'Subject'),
-      text: extractText(payload)
+      text: extractText(payload),
+      dateMs: Number(msg.internalDate) || 0 // 메일 수신 시각(epoch ms)
     });
   }
   return out;

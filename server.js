@@ -817,17 +817,33 @@ async function runRejectMailSync({ dryRun = false, log = console.log } = {}) {
     if (!parsed.isReject) continue;
     const m = matchStore(parsed, stores);
     const isNewestForStore = m ? !appliedStores.has(m.store.id) : false;
+    // 재신청이 이 반려 메일보다 나중이면 = 지금 새로 심사중이므로 이 반려는 반영하지 않는다.
+    let stale = false;
+    if (m) {
+      const reqAt = nhnRequestedAt(m.store.id); // 마지막 NHN 신청 시각(로컬시각)
+      const reqMs = reqAt ? new Date(reqAt.replace(' ', 'T')).getTime() : 0;
+      if (reqMs && mail.dateMs && reqMs > mail.dateMs) stale = true;
+    }
     results.push({
       subject: mail.subject,
       maskedNumber: parsed.maskedNumber,
       reason: parsed.reason,
       matched: m ? m.store.name : null,
       by: m ? m.by : null,
-      latest: isNewestForStore // 이 매장에서 가장 최신 반려인지(반영 대상)
+      latest: isNewestForStore, // 이 매장에서 가장 최신 반려인지(반영 대상)
+      stale // 재신청 이후의 옛 반려라 반영 제외
     });
     if (m) appliedStores.add(m.store.id); // 이후 같은 매장의 더 오래된 건은 표시만
-    if (m && parsed.reason && isNewestForStore && !dryRun) {
-      if (applyStatusUpdate(m.store, 'rejected', parsed.reason, parsed.maskedNumber, log)) updated += 1;
+    if (m && isNewestForStore && !dryRun) {
+      if (!stale && parsed.reason) {
+        // 유효한 최신 반려 → 거부 + 사유 반영
+        if (applyStatusUpdate(m.store, 'rejected', parsed.reason, parsed.maskedNumber, log)) updated += 1;
+      } else if (stale && m.store.nhn_status === 'rejected') {
+        // 재신청이 이 반려보다 나중 → 옛 반려 취소하고 '심사중'으로 복원
+        setNhnResult(m.store.id, 'requested', null);
+        log(`[reject-mail] ${m.store.name}: 재신청 이후 옛 반려 무시 → 심사중 복원`);
+        updated += 1;
+      }
     }
   }
   log(`[reject-mail] 반려메일 ${results.length}건, 매칭 ${results.filter((r) => r.matched).length}건${dryRun ? ' (드라이런)' : `, 갱신 ${updated}건`}`);
@@ -870,11 +886,17 @@ app.get('/admin/gmail/test', async (req, res) => {
     if (req.query.format === 'json') return res.json(out);
     const rows = (out.results || [])
       .map((r) => {
-        const bg = !r.matched ? '#FCE7E5' : r.latest ? '#E4F5EC' : '#FFF6E5';
+        const bg = !r.matched ? '#FCE7E5' : r.stale ? '#EEF1F4' : r.latest ? '#E4F5EC' : '#FFF6E5';
+        const suffix = !r.matched
+          ? ''
+          : r.stale
+            ? ' <b style="color:#3E4A59">· 재신청 후(반영 제외)</b>'
+            : r.latest
+              ? ' <b style="color:#12854a">· 최신(반영)</b>'
+              : ' <span style="color:#9a6b00">· 이전 건(참고)</span>';
         const tag = !r.matched
           ? '<b style="color:#A3231C">매칭 안됨</b>'
-          : esc(r.matched) + ' <span style="color:#888">(' + esc(r.by) + ')</span>' +
-            (r.latest ? ' <b style="color:#12854a">· 최신(반영)</b>' : ' <span style="color:#9a6b00">· 이전 건(참고)</span>');
+          : esc(r.matched) + ' <span style="color:#888">(' + esc(r.by) + ')</span>' + suffix;
         const reasonCell = r.reason
           ? esc(r.reason)
           : `<span style="color:#999;font-size:12px;">(사유 추출 안됨 · 제목: ${esc(r.subject)})</span>`;
