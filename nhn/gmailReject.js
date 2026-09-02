@@ -135,7 +135,9 @@ function stripHtml(html) {
     .replace(/&gt;/g, '>')
     .replace(/\s+\n/g, '\n');
 }
-// payload(파트 트리)에서 text/plain 우선, 없으면 text/html을 텍스트로.
+// payload(파트 트리)에서 본문 텍스트를 뽑는다.
+//   text/plain 과 text/html 을 모두 뽑아, "실제 반려 내용(라벨)이 있는 쪽"을 고른다.
+//   (일부 메일은 text/plain 이 거의 비어있고 HTML 에만 내용이 있어, 무조건 plain 우선이면 빈 값이 됨)
 function extractText(payload) {
   if (!payload) return '';
   const walk = (node, want) => {
@@ -150,9 +152,13 @@ function extractText(payload) {
     return '';
   };
   const plain = walk(payload, 'text/plain');
-  if (plain) return plain;
-  const html = walk(payload, 'text/html');
-  return html ? stripHtml(html) : '';
+  const htmlRaw = walk(payload, 'text/html');
+  const html = htmlRaw ? stripHtml(htmlRaw) : '';
+  const hasLabels = (s) => /발신\s*신청\s*번호|사유\s*[:：]|반려/.test(s || '');
+  if (hasLabels(plain)) return plain;
+  if (hasLabels(html)) return html;
+  // 라벨이 둘 다 없으면 더 내용이 긴 쪽을 반환
+  return (plain || '').trim().length >= (html || '').trim().length ? plain : html;
 }
 function headerOf(payload, name) {
   const h = (payload.headers || []).find((x) => x.name.toLowerCase() === name.toLowerCase());

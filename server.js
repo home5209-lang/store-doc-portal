@@ -875,10 +875,13 @@ app.get('/admin/gmail/test', async (req, res) => {
           ? '<b style="color:#A3231C">매칭 안됨</b>'
           : esc(r.matched) + ' <span style="color:#888">(' + esc(r.by) + ')</span>' +
             (r.latest ? ' <b style="color:#12854a">· 최신(반영)</b>' : ' <span style="color:#9a6b00">· 이전 건(참고)</span>');
+        const reasonCell = r.reason
+          ? esc(r.reason)
+          : `<span style="color:#999;font-size:12px;">(사유 추출 안됨 · 제목: ${esc(r.subject)})</span>`;
         return `<tr style="background:${bg};">
           <td style="white-space:nowrap;font-weight:600;">${esc(r.maskedNumber)}</td>
           <td style="white-space:nowrap;">${tag}</td>
-          <td>${esc(r.reason)}</td>
+          <td>${reasonCell}</td>
         </tr>`;
       })
       .join('');
