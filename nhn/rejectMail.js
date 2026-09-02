@@ -24,12 +24,15 @@ function squash(v) {
   return String(v || '').replace(/\s+/g, '');
 }
 
-// 반려 메일인지 판별 (발신자 + 제목/본문 키워드)
+// 반려 메일인지 판별. 단순히 "반려" 단어가 있다고 잡지 않고,
+//   ① 정식 반려 알림 제목("발신 전화번호 승인 반려")이거나
+//   ② 본문에 반려 알림 고유 구조("발신 신청 번호 :" + "사유 :")가 있어야 한다.
+//   → 설문/문의답변/접수확인 등 '반려' 단어만 들어간 메일은 제외.
 function isRejectMail({ from = '', subject = '', text = '' } = {}) {
   const fromOk = /nhncloud\.com/i.test(from);
-  const kw = `${subject}\n${text}`;
-  const rejectKw = /(발신\s*(전화)?번호[^\n]*반려|승인[^\n]*반려|반려되었습니다)/.test(kw);
-  return fromOk && rejectKw;
+  const subjectReject = /발신\s*(전화)?\s*번호\s*승인\s*반려/.test(subject);
+  const bodyReject = /발신\s*신청\s*번호\s*[:：]/.test(text) && /사유\s*[:：]/.test(text);
+  return fromOk && (subjectReject || bodyReject);
 }
 
 // "발신 신청 번호 : 16**78**" 에서 마스킹된 번호 문자열을 뽑는다. (숫자와 * 만)

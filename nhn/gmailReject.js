@@ -169,7 +169,7 @@ function headerOf(payload, name) {
 // 반환: [{ id, from, subject, text }]
 async function fetchRejectMails({ newerThanDays = 60, max = 30 } = {}) {
   const accessToken = await getAccessToken();
-  const q = `from:noreply@nhncloud.com 반려 newer_than:${newerThanDays}d`;
+  const q = `from:noreply@nhncloud.com 발신 반려 newer_than:${newerThanDays}d`;
   const listRes = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${max}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
