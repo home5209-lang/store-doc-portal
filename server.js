@@ -805,23 +805,28 @@ async function runRejectMailSync({ dryRun = false, log = console.log } = {}) {
   const { parseRejectEmail, matchStore } = require('./nhn/rejectMail');
   if (!gmail.isConnected()) return { skipped: true, reason: 'not-connected' };
 
+  // Gmail은 최신 메일부터 반환한다. 한 매장에 반려가 여러 건이면 "가장 최신 사유"만 반영하려고
+  // 이미 처리한 매장은 건너뛴다(최신이 먼저 오므로 첫 건이 최신).
   const mails = await gmail.fetchRejectMails({ newerThanDays: 60 });
   const stores = listStores();
   const results = [];
+  const appliedStores = new Set();
   let updated = 0;
   for (const mail of mails) {
     const parsed = parseRejectEmail(mail);
     if (!parsed.isReject) continue;
     const m = matchStore(parsed, stores);
-    const row = {
+    const isNewestForStore = m ? !appliedStores.has(m.store.id) : false;
+    results.push({
       subject: mail.subject,
       maskedNumber: parsed.maskedNumber,
       reason: parsed.reason,
       matched: m ? m.store.name : null,
-      by: m ? m.by : null
-    };
-    results.push(row);
-    if (m && parsed.reason && !dryRun) {
+      by: m ? m.by : null,
+      latest: isNewestForStore // 이 매장에서 가장 최신 반려인지(반영 대상)
+    });
+    if (m) appliedStores.add(m.store.id); // 이후 같은 매장의 더 오래된 건은 표시만
+    if (m && parsed.reason && isNewestForStore && !dryRun) {
       if (applyStatusUpdate(m.store, 'rejected', parsed.reason, parsed.maskedNumber, log)) updated += 1;
     }
   }
@@ -865,10 +870,14 @@ app.get('/admin/gmail/test', async (req, res) => {
     if (req.query.format === 'json') return res.json(out);
     const rows = (out.results || [])
       .map((r) => {
-        const ok = r.matched ? 'style="background:#E4F5EC;"' : 'style="background:#FCE7E5;"';
-        return `<tr ${ok}>
+        const bg = !r.matched ? '#FCE7E5' : r.latest ? '#E4F5EC' : '#FFF6E5';
+        const tag = !r.matched
+          ? '<b style="color:#A3231C">매칭 안됨</b>'
+          : esc(r.matched) + ' <span style="color:#888">(' + esc(r.by) + ')</span>' +
+            (r.latest ? ' <b style="color:#12854a">· 최신(반영)</b>' : ' <span style="color:#9a6b00">· 이전 건(참고)</span>');
+        return `<tr style="background:${bg};">
           <td style="white-space:nowrap;font-weight:600;">${esc(r.maskedNumber)}</td>
-          <td style="white-space:nowrap;">${r.matched ? esc(r.matched) + ' <span style=\"color:#888\">(' + esc(r.by) + ')</span>' : '<b style=\"color:#A3231C\">매칭 안됨</b>'}</td>
+          <td style="white-space:nowrap;">${tag}</td>
           <td>${esc(r.reason)}</td>
         </tr>`;
       })
